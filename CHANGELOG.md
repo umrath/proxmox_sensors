@@ -4,6 +4,17 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.5] - 2026-06-07
+
+### Fixed
+
+- **PBS datastore usage sensors showed wrong values** — `get_pbs_datastore_usage()`
+  was calling `admin/datastore/{store}/gc` (garbage-collection stats) instead of
+  the correct usage endpoint. Since `get_pbs_datastore_status()` already returns
+  all disk-space fields (`total`, `used`, `avail`, `deduplication`), the usage
+  method now returns `{}` to avoid a redundant network call and prevent GC data
+  from overwriting size fields in the coordinator merge.
+
 ## [4.0.4] - 2026-06-07
 
 ### Fixed

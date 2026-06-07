@@ -537,7 +537,11 @@ class ProxmoxClient:
         return await self.pbs_get(hass, f"admin/datastore/{store}/status") or {}
 
     async def get_pbs_datastore_usage(self, hass, store: str):
-        return await self.pbs_get(hass, f"admin/datastore/{store}/gc") or {}
+        # All disk-space fields (total/used/avail/deduplication) are already
+        # included in get_pbs_datastore_status() → admin/datastore/{store}/status.
+        # Calling /gc here was a copy-paste error that (a) duplicated the GC
+        # request and (b) risked overwriting status fields in the coordinator merge.
+        return {}
 
     async def get_pbs_tasks(self, hass):
         return await self.pbs_get(hass, "nodes/localhost/tasks") or []
