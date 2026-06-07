@@ -6,8 +6,6 @@ import requests
 import urllib3
 from proxmoxer import ProxmoxAPI
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -73,6 +71,9 @@ class ProxmoxClient:
     def _build_client_sync(self):
         if self._server_type == "PBS":
             return
+
+        if not self._verify_ssl:
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         port = self._port or 8006
         timeout_val = 30

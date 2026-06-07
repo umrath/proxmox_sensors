@@ -4,6 +4,19 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.9] - 2026-06-07
+
+### Security
+
+- **`urllib3.disable_warnings()` was called at module level** — this suppressed
+  `InsecureRequestWarning` globally for the entire Python process, even for users
+  who have SSL verification enabled and don't need it suppressed. It also affected
+  all other integrations loaded in the same HA instance.
+
+  Fix: Moved `urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)`
+  into `ProxmoxClient._build_client_sync()`, called only when `verify_ssl=False`.
+  Users with SSL verification enabled are no longer affected.
+
 ## [4.0.8] - 2026-06-07
 
 ### Security
