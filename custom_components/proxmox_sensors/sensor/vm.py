@@ -43,6 +43,18 @@ class ProxmoxVMSensor(ProxmoxBaseSensor):
         vm_data = self._get_vm_data()
         return str(vm_data.get("status", "unknown")).capitalize()
 
+    @property
+    def extra_state_attributes(self):
+        vm_data = self._get_vm_data()
+        if not vm_data:
+            return {}
+        attrs = {}
+        if "current_node" in vm_data:
+            attrs["current_node"] = vm_data["current_node"]
+        if "migrated" in vm_data:
+            attrs["migrated"] = vm_data["migrated"]
+        return attrs
+
 
 class ProxmoxVMAttributeSensor(ProxmoxBaseSensor):
 

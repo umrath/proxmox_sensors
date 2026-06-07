@@ -53,6 +53,18 @@ class ProxmoxContainerSensor(ProxmoxBaseSensor):
         ct_data = self._get_ct_data()
         return str(ct_data.get("status", "unknown")).capitalize()
 
+    @property
+    def extra_state_attributes(self):
+        ct_data = self._get_ct_data()
+        if not ct_data:
+            return {}
+        attrs = {}
+        if "current_node" in ct_data:
+            attrs["current_node"] = ct_data["current_node"]
+        if "migrated" in ct_data:
+            attrs["migrated"] = ct_data["migrated"]
+        return attrs
+
 
 class ProxmoxContainerAttributeSensor(ProxmoxBaseSensor):
     """Attribute sensors for CTs (CPU, memory, disk, network, uptime)."""

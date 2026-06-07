@@ -10,6 +10,110 @@ from .logic.guest_keys import make_guest_key, matches_selected_guest
 
 _LOGGER = logging.getLogger(__name__)
 
+_GUEST_FIELDS = ("cpu", "mem", "maxmem", "disk", "maxdisk", "uptime", "netin", "netout")
+
+
+def _build_vms_dict(vms, cluster_resources, selected_vms, node):
+    """Build the vms dict from per-node data, enriched with migrated VMs.
+
+    VMs that have migrated to another node are missing from the per-node
+    get_vms() response but still appear in cluster/resources.  We add them
+    back under their original node:vmid key so that existing sensor entities
+    (which were created with that key) keep working without modification.
+    """
+    vms_dict = {}
+
+    for vm in vms or []:
+        vmid = vm.get("vmid")
+        if vmid is None:
+            continue
+        guest_key = make_guest_key(node, vmid)
+        if not matches_selected_guest(selected_vms, node, vmid, guest_key):
+            continue
+        base = dict(vm)
+        base["node"] = node
+        base["guest_key"] = guest_key
+        base["current_node"] = node
+        base["migrated"] = False
+        for field in _GUEST_FIELDS:
+            base.setdefault(field, 0)
+        base.setdefault("status", "unknown")
+        vms_dict[guest_key] = base
+
+    for r in cluster_resources or []:
+        if not isinstance(r, dict) or r.get("type") != "qemu":
+            continue
+        vmid = r.get("vmid")
+        if vmid is None:
+            continue
+        original_key = make_guest_key(node, vmid)
+        if original_key in vms_dict:
+            continue   # local data takes precedence
+        if not matches_selected_guest(selected_vms, node, vmid, None):
+            continue
+        base = dict(r)
+        # Use the configured node, NOT r["node"] (current location).
+        # sensor/__init__.py reads base["node"] to build the unique_id:
+        #   uid = f"proxmox_vm_{node}_{vmid}_status_v1"
+        # If this were the current node, the unique_id would change on every
+        # migration and HA would treat it as a brand-new entity.
+        base["node"] = node
+        base["guest_key"] = original_key
+        base["current_node"] = r.get("node")
+        base["migrated"] = True
+        for field in _GUEST_FIELDS:
+            base.setdefault(field, 0)
+        base.setdefault("status", "unknown")
+        vms_dict[original_key] = base
+
+    return vms_dict
+
+
+def _build_cts_dict(cts, cluster_resources, selected_cts, node):
+    """Build the cts dict from per-node data, enriched with migrated containers."""
+    cts_dict = {}
+
+    for ct in cts or []:
+        vmid = ct.get("vmid")
+        if vmid is None:
+            continue
+        guest_key = make_guest_key(node, vmid)
+        if not matches_selected_guest(selected_cts, node, vmid, guest_key):
+            continue
+        base = dict(ct)
+        base["node"] = node
+        base["guest_key"] = guest_key
+        base["current_node"] = node
+        base["migrated"] = False
+        for field in _GUEST_FIELDS:
+            base.setdefault(field, 0)
+        base.setdefault("status", "unknown")
+        cts_dict[guest_key] = base
+
+    for r in cluster_resources or []:
+        if not isinstance(r, dict) or r.get("type") != "lxc":
+            continue
+        vmid = r.get("vmid")
+        if vmid is None:
+            continue
+        original_key = make_guest_key(node, vmid)
+        if original_key in cts_dict:
+            continue
+        if not matches_selected_guest(selected_cts, node, vmid, None):
+            continue
+        base = dict(r)
+        # Use configured node, not r["node"] — same reason as in _build_vms_dict.
+        base["node"] = node
+        base["guest_key"] = original_key
+        base["current_node"] = r.get("node")
+        base["migrated"] = True
+        for field in _GUEST_FIELDS:
+            base.setdefault(field, 0)
+        base.setdefault("status", "unknown")
+        cts_dict[original_key] = base
+
+    return cts_dict
+
 
 def _normalize_api_dict(payload):
     """Normalize Proxmox API payloads that may be wrapped in {'data': ...}."""
@@ -433,68 +537,18 @@ async def create_proxmox_coordinator(hass, entry, client):
                     vms = results[idx]
                     idx += 1
 
-                    vms_dict = {}
-                    for vm in vms or []:
-                        vmid = vm.get("vmid")
-                        if vmid is None:
-                            continue
-                        guest_key = make_guest_key(node, vmid)
-                        if not matches_selected_guest(
-                            selected_vms, node, vmid, guest_key
-                        ):
-                            continue
-                        base = dict(vm)
-                        base["node"] = node
-                        base["guest_key"] = guest_key
-                        for field in [
-                            "cpu",
-                            "mem",
-                            "maxmem",
-                            "disk",
-                            "maxdisk",
-                            "uptime",
-                            "netin",
-                            "netout",
-                        ]:
-                            base.setdefault(field, 0)
-                        base.setdefault("status", "unknown")
-                        vms_dict[guest_key] = base
-
-                    result["vms"] = vms_dict
+                    result["vms"] = _build_vms_dict(
+                        vms, cluster_resources, selected_vms, node
+                    )
 
                     # -------- Containers --------
 
                     cts = results[idx]
                     idx += 1
 
-                    cts_dict = {}
-                    for ct in cts or []:
-                        vmid = ct.get("vmid")
-                        if vmid is None:
-                            continue
-                        guest_key = make_guest_key(node, vmid)
-                        if not matches_selected_guest(
-                            selected_cts, node, vmid, guest_key
-                        ):
-                            continue
-                        base = dict(ct)
-                        base["node"] = node
-                        base["guest_key"] = guest_key
-                        for field in [
-                            "cpu",
-                            "mem",
-                            "maxmem",
-                            "disk",
-                            "maxdisk",
-                            "uptime",
-                            "netin",
-                            "netout",
-                        ]:
-                            base.setdefault(field, 0)
-                        base.setdefault("status", "unknown")
-                        cts_dict[guest_key] = base
-
-                    result["cts"] = cts_dict
+                    result["cts"] = _build_cts_dict(
+                        cts, cluster_resources, selected_cts, node
+                    )
 
                     # -------- Storage --------
 

@@ -141,6 +141,8 @@ def register_services(hass: HomeAssistant, entry):
             for vm_data in data["vms"].values():
                 if not isinstance(vm_data, dict):
                     continue
+                if vm_data.get("migrated"):
+                    continue   # migrated VMs live on another node; vzdump would fail
                 if vm_data.get("node") != node:
                     continue
                 vmid = vm_data.get("vmid")
@@ -152,6 +154,8 @@ def register_services(hass: HomeAssistant, entry):
             for ct_data in data["cts"].values():
                 if not isinstance(ct_data, dict):
                     continue
+                if ct_data.get("migrated"):
+                    continue   # migrated CTs live on another node; vzdump would fail
                 if ct_data.get("node") != node:
                     continue
                 ctid = ct_data.get("vmid")
