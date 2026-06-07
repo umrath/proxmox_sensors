@@ -162,6 +162,13 @@ _ha_ce = _make_module("homeassistant.config_entries")
 _ha_ce.ConfigEntry = MagicMock
 _ha_ce.config_entries = MagicMock
 _ha_ce.SOURCE_INTEGRATION_DISCOVERY = "integration_discovery"
+
+class _ConfigFlowBase:
+    """Minimal ConfigFlow base so config_flow.py can be imported in tests."""
+    def __init_subclass__(cls, domain=None, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+_ha_ce.ConfigFlow = _ConfigFlowBase
 _ha.config_entries = _ha_ce
 
 # homeassistant.exceptions

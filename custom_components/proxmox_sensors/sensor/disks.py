@@ -71,7 +71,7 @@ class ProxmoxDiskSensor(ProxmoxBaseSensor):
             smart_model = (
                 disk_smart.get("model", "").replace(" ", "_").replace("-", "_").lower()
             )
-            if smart_model and clean_model in smart_model or smart_model in clean_model:
+            if smart_model and (clean_model in smart_model or smart_model in clean_model):
                 return disk_smart
 
         return None

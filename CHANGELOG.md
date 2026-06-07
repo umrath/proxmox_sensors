@@ -4,6 +4,36 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.14] - 2026-06-07
+
+### Fixed
+
+- **H1 — `build_cluster_notifications_data` doppelt definiert** (`logic/cluster_notifications.py`) —
+  Die zweite Definition überschrieb die erste still und fehlte das `"notifications_configured"`-Feld
+  sowie den `"not_configured"`-Zweig für leere Notify-Konfigurationen. Zweite Definition entfernt,
+  erste (korrekte) bleibt erhalten.
+
+- **H2 — `ProxmoxConfigFlow.VERSION = 1` vs. `ENTRY_VERSION = 2`** (`config_flow.py`) —
+  Neue Einträge via Config Flow hatten `version=1` und lösten nach jedem HA-Start eine
+  Migration aus. `VERSION` auf `2` gesetzt.
+
+- **H3 — Operator-Precedence-Bug beim SMART-Disk-Matching** (`sensor/disks.py`) —
+  `if smart_model and clean_model in smart_model or smart_model in clean_model` wurde falsch
+  geklammert: `"" in any_string` ist immer `True`, sodass SMART-Einträge mit leerem Model-Feld
+  jeder Disk zugeordnet wurden. Korrekte Klammerung:
+  `if smart_model and (clean_model in smart_model or smart_model in clean_model)`.
+
+- **H4 — `PBSLastActionSensor` unique_id ohne `server_id`-Präfix** (`sensor/sensor_last_action.py`) —
+  Zwei PBS-Instanzen mit gleichnamigem Datastore erzeugten identische `unique_id`s und führten
+  zu Entity-Konflikten in HA. Unique-ID-Schema auf `pbs_{server_id}_{datastore}_last_action`
+  vereinheitlicht (konsistent mit allen anderen PBS-Sensoren).
+
+- **H5 — `asyncio.sleep(delay_between)` blockierte den Semaphore-Slot** (`services.py`) —
+  Der Delay-Sleep lag innerhalb des `async with semaphore`-Blocks in `backup_with_limit`.
+  Mit `max_concurrent=1` konnte der nächste Backup erst nach dem gesamten Delay starten,
+  obwohl der API-Call bereits abgeschlossen war — `max_concurrent` war damit wirkungslos.
+  Sleep auf nach dem `async with`-Block verschoben.
+
 ## [4.0.13] - 2026-06-07
 
 ### Fixed

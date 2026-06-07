@@ -146,35 +146,6 @@ def resolve_notification_target(target_name, gotify_endpoints):
     return resolved
 
 
-def build_cluster_notifications_data(cluster_options, gotify_endpoints):
-    """Build normalized cluster notification data from API responses."""
-    notify_raw = {}
-    if isinstance(cluster_options, dict):
-        notify_raw = parse_notify_string(cluster_options.get("notify"))
-
-    target_package_updates = notify_raw.get("target_package_updates")
-    target_resolution = resolve_notification_target(
-        target_package_updates, gotify_endpoints
-    )
-
-    return {
-        "notify_raw": (
-            cluster_options.get("notify") if isinstance(cluster_options, dict) else None
-        ),
-        "notify": notify_raw,
-        "gotify_endpoints": (
-            gotify_endpoints if isinstance(gotify_endpoints, list) else []
-        ),
-        "package_updates": notify_raw.get("package_updates"),
-        "replication": notify_raw.get("replication"),
-        "fencing": notify_raw.get("fencing"),
-        "target_package_updates": target_resolution["target"],
-        "target_package_updates_type": target_resolution["type"],
-        "target_package_updates_server": target_resolution["server"],
-        "target_package_updates_origin": target_resolution["origin"],
-    }
-
-
 def is_notification_enabled(value):
     """Return ``True`` when a notification mode should be treated as enabled."""
     if value is None:

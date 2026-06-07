@@ -227,8 +227,8 @@ def register_services(hass: HomeAssistant, entry):
         last_idx = len(targets) - 1
 
         async def backup_with_limit(vmid, idx):
-            async with semaphore:
-                try:
+            try:
+                async with semaphore:
                     _LOGGER.info(f"Starting backup of {vmid}...")
                     result = await client.start_vzdump(
                         hass,
@@ -239,16 +239,16 @@ def register_services(hass: HomeAssistant, entry):
                         compress=compress,
                         notes="HA-{{vmid}}, {{guestname}}",
                     )
-                    _LOGGER.info(f"Backup of {vmid} started successfully")
+                _LOGGER.info(f"Backup of {vmid} started successfully")
 
-                    if delay_between > 0 and idx < last_idx:
-                        _LOGGER.info(f"Waiting {delay_between}s before next backup...")
-                        await asyncio.sleep(delay_between)
+                if delay_between > 0 and idx < last_idx:
+                    _LOGGER.info(f"Waiting {delay_between}s before next backup...")
+                    await asyncio.sleep(delay_between)
 
-                    return (vmid, True, result)
-                except Exception as e:
-                    _LOGGER.error(f"Error in backup of {vmid}: {e}")
-                    return (vmid, False, str(e))
+                return (vmid, True, result)
+            except Exception as e:
+                _LOGGER.error(f"Error in backup of {vmid}: {e}")
+                return (vmid, False, str(e))
 
         tasks = [backup_with_limit(vmid, idx) for idx, vmid in enumerate(targets)]
         results = await asyncio.gather(*tasks, return_exceptions=True)

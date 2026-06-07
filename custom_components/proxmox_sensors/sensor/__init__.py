@@ -587,7 +587,7 @@ async def async_setup_entry(
         for store_id in c_data.get("pbs_datastores", {}):
 
             # Last Action
-            entities.append(PBSLastActionSensor(coordinator, store_id))
+            entities.append(PBSLastActionSensor(coordinator, server_id, store_id))
 
             entities.append(
                 ProxmoxPBSDatastoreUsageSensor(coordinator, server_id, store_id)
