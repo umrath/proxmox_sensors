@@ -10,13 +10,28 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
-def register_services(hass: HomeAssistant, entry):
+def _find_entry_for_node(hass: HomeAssistant, node: str):
+    """Return entry_data for the PVE entry that owns *node*, or None."""
+    for entry_data in hass.data.get(DOMAIN, {}).values():
+        if entry_data.get("node") == node:
+            return entry_data
+    return None
 
-    entry_data = hass.data[DOMAIN][entry.entry_id]
-    client = entry_data["client"]
-    coordinator = entry_data["coordinator"]
-    node = entry.data.get("node", "Proxmox")
-    entry_id = entry.entry_id
+
+def register_services(hass: HomeAssistant, entry):
+    """Register (or no-op if already registered) all Proxmox services.
+
+    All handlers dispatch on the ``node`` parameter from the service call so
+    that multi-node setups with several PVE entries work correctly — the last
+    call to register_services no longer silently overwrites the handlers of
+    the first.
+    """
+
+    # Guard: register each service only once per HA instance.
+    # Subsequent entries for other nodes still benefit from the node-dispatching
+    # handlers below, which look up the right entry at call time.
+    if hass.services.has_service(DOMAIN, "backup_all"):
+        return
 
     # ====== SIMPLE / MULTI BACKUP SERVICE ==========
     async def handle_create_vzdump_backup(call: ServiceCall):
@@ -48,6 +63,13 @@ def register_services(hass: HomeAssistant, entry):
             raise ValueError("Guests must be int, list or comma-separated string")
 
         targets = [int(g) for g in guests]
+
+        entry_data = _find_entry_for_node(hass, node)
+        if entry_data is None:
+            _LOGGER.warning("No configured entry found for node %s", node)
+            return
+
+        client = entry_data["client"]
 
         _LOGGER.info(
             f"Backup requested for guests {targets} on node {node} "
@@ -130,6 +152,12 @@ def register_services(hass: HomeAssistant, entry):
             _LOGGER.warning("Massive backup requested without selecting VMs or CTs")
             return
 
+        entry_data = _find_entry_for_node(hass, node)
+        if entry_data is None:
+            _LOGGER.warning("No configured entry found for node %s", node)
+            return
+
+        client = entry_data["client"]
         coordinator = entry_data["coordinator"]
         data = coordinator.data or {}
 
@@ -273,8 +301,13 @@ def register_services(hass: HomeAssistant, entry):
             )
             return
 
+        entry_data = _find_entry_for_node(hass, node)
+        if entry_data is None:
+            _LOGGER.warning("No configured entry found for node %s", node)
+            return
+
         try:
-            result = await client.shutdown_node(hass, node)
+            result = await entry_data["client"].shutdown_node(hass, node)
             if result:
                 persistent_notification.dismiss(
                     hass, f"proxmox_shutdown_confirm_{node}"
@@ -304,8 +337,13 @@ def register_services(hass: HomeAssistant, entry):
             )
             return
 
+        entry_data = _find_entry_for_node(hass, node)
+        if entry_data is None:
+            _LOGGER.warning("No configured entry found for node %s", node)
+            return
+
         try:
-            result = await client.reboot_node(hass, node)
+            result = await entry_data["client"].reboot_node(hass, node)
             if result:
                 persistent_notification.dismiss(hass, f"proxmox_reboot_confirm_{node}")
         except Exception as e:
@@ -319,7 +357,15 @@ def register_services(hass: HomeAssistant, entry):
         node = call.data.get("node")
         mac = call.data.get("mac")
 
-        cluster_nodes = coordinator.data.get("cluster_nodes", [])
+        # Collect cluster_nodes from all available PVE coordinators
+        cluster_nodes = []
+        for edata in hass.data.get(DOMAIN, {}).values():
+            coord = edata.get("coordinator")
+            if coord and coord.data:
+                nodes = coord.data.get("cluster_nodes", [])
+                for n in nodes:
+                    if n not in cluster_nodes:
+                        cluster_nodes.append(n)
 
         # -------- AUTO NODE (single node setups) --------
         if not node:

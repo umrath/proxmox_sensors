@@ -36,12 +36,14 @@ def _make_hass(coordinator_data, node="node1"):
             "test_entry": {
                 "client": client,
                 "coordinator": coordinator,
+                "node": node,
             }
         }
     }
 
     registered = {}
     hass.services = MagicMock()
+    hass.services.has_service = MagicMock(return_value=False)
     hass.services.async_register = lambda domain, name, handler: registered.__setitem__(
         name, handler
     )

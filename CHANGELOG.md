@@ -4,6 +4,20 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.6] - 2026-06-07
+
+### Fixed
+
+- **Services only worked for the last configured node in multi-node setups** —
+  Each PVE entry called `register_services()` which overwrote the previous
+  handler. All service calls then used the client of the *last* registered
+  entry, regardless of which node was specified in the call.
+
+  Fix: Services are now registered only once per HA instance. Every handler
+  looks up the correct entry at call time via `_find_entry_for_node()` which
+  searches `hass.data[DOMAIN]` by the `node` parameter from the service call.
+  If no matching entry is found the service logs a warning and exits cleanly.
+
 ## [4.0.5] - 2026-06-07
 
 ### Fixed
