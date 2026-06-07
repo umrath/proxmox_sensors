@@ -4,6 +4,14 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.12] - 2026-06-07
+
+### Added
+
+- **HACS one-click install button** — Added the standard `my.home-assistant.io` badge
+  to `README.md` and `docs/en/README.md` so users can add the repository to HACS
+  without manually copying the URL.
+
 ## [4.0.11] - 2026-06-07
 
 ### Housekeeping
