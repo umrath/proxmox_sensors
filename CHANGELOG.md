@@ -4,6 +4,19 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.3] - 2026-06-07
+
+### Fixed
+
+- **`backup_all` service crashed with `NameError` on every call** — `limited_task`
+  was referenced inside `handle_backup_all` but was only defined in the coordinator
+  scope. The concurrency semaphore is already embedded in `backup_with_limit`, so
+  `asyncio.gather(*tasks)` is the correct call.
+
+- **`backup_all` crashed with `TypeError` when coordinator had no data yet** —
+  `coordinator.data` can be `None` during the first poll or after a failed update.
+  Added `or {}` guard so the service exits cleanly instead of raising.
+
 ## [4.0.2] - 2026-06-07
 
 ### Fixed

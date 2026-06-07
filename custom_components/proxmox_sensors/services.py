@@ -131,7 +131,7 @@ def register_services(hass: HomeAssistant, entry):
             return
 
         coordinator = entry_data["coordinator"]
-        data = coordinator.data
+        data = coordinator.data or {}
 
         vm_list = []
         ct_list = []
@@ -204,10 +204,7 @@ def register_services(hass: HomeAssistant, entry):
                     return (vmid, False, str(e))
 
         tasks = [backup_with_limit(vmid) for vmid in targets]
-        results = await asyncio.gather(
-            *(limited_task(task) for task in tasks),
-            return_exceptions=True,
-        )
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
         success_count = 0
         error_count = 0
