@@ -1,6 +1,6 @@
 """Sensors PBS for Proxmox Extended Sensors."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from homeassistant.const import PERCENTAGE, UnitOfInformation
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -296,7 +296,7 @@ class ProxmoxPBSTaskStatusSensor(ProxmoxPbsBaseSensor):
 
         def format_ts(ts):
             if ts and isinstance(ts, (int, float)):
-                return datetime.fromtimestamp(ts).strftime("%d/%m/%Y %H:%M:%S")
+                return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%d/%m/%Y %H:%M:%S")
             return ts
 
         return {
@@ -523,7 +523,7 @@ class ProxmoxPBSLastBackupTimeSensor(ProxmoxPbsBaseSensor):
         ts = last.get("backup-time")
         if not ts:
             return None
-        return datetime.fromtimestamp(ts).strftime("%d/%m/%Y %H:%M:%S")
+        return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%d/%m/%Y %H:%M:%S")
 
     @property
     def device_info(self):
@@ -682,9 +682,9 @@ class ProxmoxPBSBackupsListSensor(ProxmoxPbsBaseSensor):
                 if key not in summary or b_time > summary[key]["raw_time"]:
                     summary[key] = {
                         "raw_time": b_time,
-                        "last_backup": datetime.fromtimestamp(b_time).strftime(
-                            "%d/%m/%Y %H:%M:%S"
-                        ),
+                        "last_backup": datetime.fromtimestamp(
+                            b_time, tz=timezone.utc
+                        ).strftime("%d/%m/%Y %H:%M:%S"),
                     }
 
         return {
@@ -749,9 +749,9 @@ class ProxmoxPBSMaintenanceSensor(ProxmoxPbsBaseSensor):
 
         last_run = data.get("last-run")
         if last_run:
-            attrs["last_run"] = datetime.fromtimestamp(last_run).strftime(
-                "%d/%m/%Y %H:%M:%S"
-            )
+            attrs["last_run"] = datetime.fromtimestamp(
+                last_run, tz=timezone.utc
+            ).strftime("%d/%m/%Y %H:%M:%S")
 
         for key, attr_name in [
             ("removed-bytes", "removed_gb"),
@@ -838,8 +838,6 @@ class ProxmoxPBSVerifySensor(ProxmoxPbsBaseSensor):
         if not task:
             return {}
 
-        from datetime import datetime
-
         duration = task.get("duration")
         end = task.get("endtime")
         status = task.get("status")
@@ -849,7 +847,7 @@ class ProxmoxPBSVerifySensor(ProxmoxPbsBaseSensor):
             "duration_sec": duration,
             "duration_min": round(duration / 60, 2) if duration else None,
             "last_run": (
-                datetime.fromtimestamp(end).strftime("%d/%m/%Y %H:%M:%S")
+                datetime.fromtimestamp(end, tz=timezone.utc).strftime("%d/%m/%Y %H:%M:%S")
                 if isinstance(end, (int, float))
                 else None
             ),
@@ -924,7 +922,6 @@ class ProxmoxPBSPruneSensor(ProxmoxPbsBaseSensor):
         if not task:
             return {}
 
-        from datetime import datetime
         import time
 
         start = task.get("starttime")
@@ -944,7 +941,7 @@ class ProxmoxPBSPruneSensor(ProxmoxPbsBaseSensor):
             "duration_sec": duration,
             "duration_min": round(duration / 60, 2) if duration else 0,
             "last_run": (
-                datetime.fromtimestamp(end).strftime("%d/%m/%Y %H:%M:%S")
+                datetime.fromtimestamp(end, tz=timezone.utc).strftime("%d/%m/%Y %H:%M:%S")
                 if isinstance(end, (int, float))
                 else None
             ),

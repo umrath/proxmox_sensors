@@ -53,6 +53,10 @@ class _SensorEntity:
         except Exception:
             return None
 
+    @property
+    def unique_id(self):
+        return self._attr_unique_id
+
     def _get_value(self):  # pragma: no cover
         raise NotImplementedError
 

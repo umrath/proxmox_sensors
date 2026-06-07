@@ -4,6 +4,42 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.18] - 2026-06-07
+
+### Fixed (Second review — MEDIUM)
+
+- **M1 — Globale urllib3-Warnungsunterdrückung dokumentiert** (`api.py`) —
+  `urllib3.disable_warnings(InsecureRequestWarning)` wirkt prozessglobal und lässt sich
+  nicht sauber pro Client einschränken, da proxmoxer/requests in Executor-Threads laufen
+  und `warnings.catch_warnings()` nicht thread-safe ist. Verhalten unverändert, aber als
+  bewusste Einschränkung kommentiert, damit es nicht fälschlich als Bug "gefixt" wird.
+
+- **M2 — PBS-Zeitstempel waren zeitzonen-naiv** (`sensor/pbs.py`) —
+  Mehrere `datetime.fromtimestamp(...)`-Aufrufe interpretierten PBS-Epoch-Werte in der
+  lokalen Zeitzone des Hosts. Alle Aufrufe nutzen jetzt `tz=timezone.utc`, sodass die
+  angezeigten Zeiten unabhängig von der HA-Server-Zeitzone korrekt sind.
+
+- **M3 — PBS `server_id` aus einem Sequenzzähler abgeleitet** (`config_flow.py`) —
+  `server_id = f"pbs_{len(pbs_entries) + 1}"` war race-anfällig und änderte sich, wenn
+  frühere Einträge entfernt wurden, was zu kollidierenden oder wechselnden Unique-IDs
+  führte. Wird jetzt deterministisch aus dem Host abgeleitet (`pbs_<host_slug>`).
+
+- **M4 — Shutdown/Reboot-Services validierten den Node nicht** (`services.py`) —
+  `confirm_shutdown_node` / `confirm_reboot_node` übernahmen den `node`-Parameter ungeprüft
+  in den API-Pfad. Beide validieren den Bezeichner jetzt über `_validate_identifier`
+  (`^[a-zA-Z0-9_\-\.]+$`) und lehnen leere oder unsichere Werte mit `ValueError` ab.
+
+- **M5 — Recency-Prüfung galt nur für Einzel-Fehler** (`coordinator.py`) —
+  Bei mehreren fehlgeschlagenen Backup-Jobs wurde der Zustand bedingungslos auf `error`
+  gesetzt, ohne die 24h-Aktualitätsprüfung. Dadurch blieben längst veraltete Mehrfach-
+  Fehler dauerhaft als `error` hängen. Die Recency-Prüfung gilt jetzt für jede Anzahl von
+  Fehlern; veraltete Fehler werden zu `warning` herabgestuft.
+
+- **M6 — Entity-Cleanup nutzte `_attr_unique_id` statt `unique_id`** (`sensor/__init__.py`) —
+  Die Aufräumlogik bildete das Set aus `getattr(entity, "_attr_unique_id", None)`. Entities,
+  die ihre `unique_id` über eine berechnete Property bereitstellen (ohne `_attr_unique_id`),
+  wären fälschlich gelöscht worden. Nutzt jetzt die öffentliche `entity.unique_id`.
+
 ## [4.0.17] - 2026-06-07
 
 ### Fixed (Second review — HIGH)

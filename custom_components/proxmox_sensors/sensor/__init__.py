@@ -644,7 +644,7 @@ async def async_setup_entry(
     if entities:
         ent_reg = er.async_get(hass)
         existing_entries = er.async_entries_for_config_entry(ent_reg, entry.entry_id)
-        new_unique_ids = {getattr(entity, "_attr_unique_id", None) for entity in entities}
+        new_unique_ids = {entity.unique_id for entity in entities}
 
         for entity_entry in existing_entries:
             if entity_entry.unique_id not in new_unique_ids:

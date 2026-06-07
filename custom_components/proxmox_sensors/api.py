@@ -72,6 +72,11 @@ class ProxmoxClient:
         if self._server_type == "PBS":
             return
 
+        # The InsecureRequestWarning is emitted from inside proxmoxer's requests
+        # calls (run in executor threads). warnings filters are process-global and
+        # catch_warnings() is not thread-safe, so this cannot be scoped per-client.
+        # We suppress it globally but only when the user has explicitly opted into
+        # an unverified TLS connection.
         if not self._verify_ssl:
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 

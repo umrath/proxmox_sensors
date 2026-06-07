@@ -305,8 +305,10 @@ def register_services(hass: HomeAssistant, entry):
     # ========SHUTDOWN NODE===========
 
     async def handle_confirm_shutdown(call: ServiceCall):
-        node = call.data.get("node")
+        node = str(call.data.get("node") or "").strip()
         confirm = call.data.get("confirm", False)
+
+        _validate_identifier(node, "node")
 
         if not confirm:
             notification_id = f"proxmox_shutdown_confirm_{node}"
@@ -341,8 +343,10 @@ def register_services(hass: HomeAssistant, entry):
     # =======REBOOT NODE==========
 
     async def handle_confirm_reboot(call: ServiceCall):
-        node = call.data.get("node")
+        node = str(call.data.get("node") or "").strip()
         confirm = call.data.get("confirm", False)
+
+        _validate_identifier(node, "node")
 
         if not confirm:
             notification_id = f"proxmox_reboot_confirm_{node}"

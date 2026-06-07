@@ -248,13 +248,13 @@ def _build_backup_jobs_payload(jobs, tasks):
             job["last_status"] == "OK" for job in normalized_jobs
         ):
             state = "ok"
-        elif failed_jobs > 1:
-            state = "error"
         elif (
-            failed_jobs == 1
+            failed_jobs >= 1
             and recent_failed_ts is not None
             and (now_ts - recent_failed_ts) <= 86400
         ):
+            # Any number of failures is "error" only if the most recent failure
+            # is within the last 24h; stale failures degrade to "warning".
             state = "error"
         elif failed_jobs >= 1:
             state = "warning"

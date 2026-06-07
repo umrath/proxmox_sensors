@@ -3,6 +3,7 @@
 from __future__ import annotations
 import logging
 import asyncio
+import re
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -530,11 +531,11 @@ class ProxmoxConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # ============= PBS =================
         if server_type == "PBS":
-            entries = self.hass.config_entries.async_entries(DOMAIN)
-            pbs_entries = [
-                e for e in entries if e.data.get(CONF_PLATFORM_TYPE) == "PBS"
-            ]
-            self._config["server_id"] = f"pbs_{len(pbs_entries) + 1}"
+            # Derive server_id from the host (like the CLUSTER branch) rather than a
+            # sequential counter: two PBS flows completing concurrently could both read
+            # the same count and assign colliding unique_ids for every PBS entity.
+            host_slug = re.sub(r"[^a-zA-Z0-9]", "_", str(self._config[CONF_HOST]))
+            self._config["server_id"] = f"pbs_{host_slug}"
 
             try:
                 client = ProxmoxClient(
