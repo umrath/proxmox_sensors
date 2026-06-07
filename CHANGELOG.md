@@ -4,6 +4,17 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.10] - 2026-06-07
+
+### Fixed
+
+- **Duplicate `_LOGGER` definition in `sensor/__init__.py`** — `_LOGGER` was assigned
+  twice (lines 19 and 95), the second assignment being a no-op that cluttered the file.
+  Removed the redundant assignment.
+
+- **`import re` inside function body in `sensor/__init__.py`** — `import re` was placed
+  inside `async_setup_entry` instead of at the top of the module. Moved to module level.
+
 ## [4.0.9] - 2026-06-07
 
 ### Security

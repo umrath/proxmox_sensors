@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import logging
+import re
 
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.core import HomeAssistant
@@ -92,7 +93,6 @@ from .pbs import (
     ProxmoxPBSPruneSensor,
 )
 
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -255,8 +255,6 @@ async def async_setup_entry(
                     other_sensors.append(key)
 
             # Second: Group NVMe by device
-            import re
-
             nvme_devices = set()
 
             for key in nvme_sensors:
