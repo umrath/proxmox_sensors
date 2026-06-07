@@ -207,7 +207,9 @@ def register_services(hass: HomeAssistant, entry):
         semaphore = asyncio.Semaphore(max_concurrent)
         results = []
 
-        async def backup_with_limit(vmid):
+        last_idx = len(targets) - 1
+
+        async def backup_with_limit(vmid, idx):
             async with semaphore:
                 try:
                     _LOGGER.info(f"Starting backup of {vmid}...")
@@ -222,7 +224,7 @@ def register_services(hass: HomeAssistant, entry):
                     )
                     _LOGGER.info(f"Backup of {vmid} started successfully")
 
-                    if delay_between > 0 and vmid != targets[-1]:
+                    if delay_between > 0 and idx < last_idx:
                         _LOGGER.info(f"Waiting {delay_between}s before next backup...")
                         await asyncio.sleep(delay_between)
 
@@ -231,7 +233,7 @@ def register_services(hass: HomeAssistant, entry):
                     _LOGGER.error(f"Error in backup of {vmid}: {e}")
                     return (vmid, False, str(e))
 
-        tasks = [backup_with_limit(vmid) for vmid in targets]
+        tasks = [backup_with_limit(vmid, idx) for idx, vmid in enumerate(targets)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         success_count = 0

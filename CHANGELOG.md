@@ -4,6 +4,21 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.7] - 2026-06-07
+
+### Fixed
+
+- **Entity cleanup wiped all entities on empty coordinator data** — on HA restart
+  or temporary network failure the coordinator can return partial data, resulting
+  in an empty entity list. The cleanup loop then removed every previously
+  registered entity. The cleanup now runs only when at least one entity was
+  successfully created.
+
+- **`backup_all` delay used string comparison for "last target"** — the check
+  `vmid != targets[-1]` compared strings, which works by coincidence but is
+  semantically wrong. Replaced with an index check (`idx < last_idx`) that
+  is unambiguous and works correctly even if two guests share an ID.
+
 ## [4.0.6] - 2026-06-07
 
 ### Fixed

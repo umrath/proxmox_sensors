@@ -639,21 +639,25 @@ async def async_setup_entry(
         entities.append(ProxmoxPBSReleaseSensor(coordinator, server_id))
 
     # =========ENTITY AND DEVICE CLEANUP============
-    ent_reg = er.async_get(hass)
-    existing_entries = er.async_entries_for_config_entry(ent_reg, entry.entry_id)
-    new_unique_ids = {getattr(entity, "_attr_unique_id", None) for entity in entities}
+    # Guard: skip cleanup when no entities were created. An empty entity list
+    # during a partial-data fetch (first poll, sidecar down, network hiccup)
+    # would otherwise delete all previously registered entities.
+    if entities:
+        ent_reg = er.async_get(hass)
+        existing_entries = er.async_entries_for_config_entry(ent_reg, entry.entry_id)
+        new_unique_ids = {getattr(entity, "_attr_unique_id", None) for entity in entities}
 
-    for entity_entry in existing_entries:
-        if entity_entry.unique_id not in new_unique_ids:
-            _LOGGER.info("Removing obsolete entity: %s", entity_entry.entity_id)
-            ent_reg.async_remove(entity_entry.entity_id)
+        for entity_entry in existing_entries:
+            if entity_entry.unique_id not in new_unique_ids:
+                _LOGGER.info("Removing obsolete entity: %s", entity_entry.entity_id)
+                ent_reg.async_remove(entity_entry.entity_id)
 
-    dev_reg = dr.async_get(hass)
-    devices = dr.async_entries_for_config_entry(dev_reg, entry.entry_id)
-    for device in devices:
-        if not er.async_entries_for_device(ent_reg, device.id):
-            _LOGGER.info("Removing orphan device: %s", device.name)
-            dev_reg.async_remove_device(device.id)
+        dev_reg = dr.async_get(hass)
+        devices = dr.async_entries_for_config_entry(dev_reg, entry.entry_id)
+        for device in devices:
+            if not er.async_entries_for_device(ent_reg, device.id):
+                _LOGGER.info("Removing orphan device: %s", device.name)
+                dev_reg.async_remove_device(device.id)
 
     if entities:
         async_add_entities(entities)
