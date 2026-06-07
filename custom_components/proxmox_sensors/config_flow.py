@@ -503,6 +503,20 @@ class ProxmoxConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.error("Error fetching resources: %s", e)
             return await self._finish()
 
+    # ===== INTEGRATION DISCOVERY (auto-created CLUSTER entries) ==========
+
+    async def async_step_integration_discovery(self, discovery_info) -> FlowResult:
+        """Handle auto-discovery of CLUSTER entries triggered by a PVE entry."""
+        self._config = dict(discovery_info)
+        # Abort if this cluster already has an entry (race-condition guard)
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            if (
+                entry.data.get(CONF_PLATFORM_TYPE) == "CLUSTER"
+                and entry.data.get("cluster_name") == self._config.get("cluster_name")
+            ):
+                return self.async_abort(reason="already_configured")
+        return await self._finish()
+
     # ===== FINAL STEP ==========
 
     async def _finish(self):

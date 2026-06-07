@@ -161,6 +161,7 @@ _ha.const = _ha_const
 _ha_ce = _make_module("homeassistant.config_entries")
 _ha_ce.ConfigEntry = MagicMock
 _ha_ce.config_entries = MagicMock
+_ha_ce.SOURCE_INTEGRATION_DISCOVERY = "integration_discovery"
 _ha.config_entries = _ha_ce
 
 # homeassistant.exceptions

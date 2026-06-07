@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import asyncio
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, SOURCE_INTEGRATION_DISCOVERY
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.const import Platform
@@ -131,6 +131,14 @@ async def _async_manage_cluster_entry(
         "parent_entry_id": pve_entry.entry_id,
         "server_id": f"cluster_{cluster_name.lower()}",
     }
+
+    hass.async_create_task(
+        hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_INTEGRATION_DISCOVERY},
+            data=cluster_data,
+        )
+    )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

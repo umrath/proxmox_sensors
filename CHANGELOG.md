@@ -4,6 +4,17 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.4] - 2026-06-07
+
+### Fixed
+
+- **CLUSTER entry was never auto-created** — `_async_manage_cluster_entry`
+  assembled `cluster_data` but never called `hass.config_entries.flow.async_init()`.
+  The CLUSTER coordinator (cluster-wide sensors: quorum, HA status, backup jobs)
+  therefore never started. Added the missing `hass.async_create_task(flow.async_init(...))`
+  call and the corresponding `async_step_integration_discovery` handler in the
+  config flow so the entry is created without user interaction.
+
 ## [4.0.3] - 2026-06-07
 
 ### Fixed
