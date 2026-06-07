@@ -4,6 +4,18 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.11] - 2026-06-07
+
+### Housekeeping
+
+- **Fork attribution** — Added credits section to `README.md` and all localized docs
+  crediting [Javisen](https://github.com/Javisen) as the original upstream author.
+- **Repository URLs** — Updated `manifest.json` (`codeowners`, `documentation`,
+  `issue_tracker`), HACS install instructions, sidecar script `wget` URLs, and all
+  doc footers/logo links from `Javisen/proxmox_sensors` to `umrath/proxmox_sensors`.
+- **License** — Added umrath's fork copyright alongside the original Javisen copyright
+  as required by the MIT License terms.
+
 ## [4.0.10] - 2026-06-07
 
 ### Fixed
