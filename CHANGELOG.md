@@ -4,6 +4,30 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.19] - 2026-06-07
+
+### Fixed (Second review — LOW)
+
+- **L1 — `PBSLastActionSensor` überschrieb `state` statt `native_value`** (`sensor/sensor_last_action.py`) —
+  Eine `SensorEntity` soll ihren Wert über `native_value` liefern; das direkte Überschreiben
+  von `state` umgeht die Verarbeitung der Basisklasse (Unit/Device-Class/State-Class). Auf
+  `native_value` umgestellt.
+
+- **L2 — Sidecar-URLs brachen bei Host mit Port** (`api.py`) —
+  Die HTTP-Sidecar-Endpunkte (`:9000`) bauten die URL als `http://{host}:9000/...`. Enthielt
+  `host` bereits einen API-Port (z. B. `pve.local:8006`), entstand die ungültige URL
+  `http://pve.local:8006:9000/...`. Neuer Helfer `_sidecar_host()` entfernt einen eingebetteten
+  Port (inkl. bracketed IPv6) vor dem Anhängen von `:9000`.
+
+- **L3 — WOL-MAC-Validierung prüfte nur die Länge** (`services.py`) —
+  `handle_wake_node` akzeptierte jeden 12-Zeichen-String nach Entfernen der Trennzeichen,
+  auch nicht-hexadezimale wie `gg:hh:ii:jj:kk:ll`. Validiert jetzt gegen `^[0-9a-fA-F]{12}$`.
+
+- **L4 — `pbs_auth_status` nutzte Dict-Truthiness** (`coordinator.py`) —
+  `"OK" if version_info else "ERROR"` meldete "OK", sobald `get_pbs_version` irgendein
+  nicht-leeres Dict zurückgab — auch ohne tatsächliche Versionsangabe. Prüft jetzt
+  `version_info.get("version")`.
+
 ## [4.0.18] - 2026-06-07
 
 ### Fixed (Second review — MEDIUM)

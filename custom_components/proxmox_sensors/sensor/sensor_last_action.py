@@ -33,7 +33,7 @@ class PBSLastActionSensor(CoordinatorEntity, SensorEntity):
         }
 
     @property
-    def state(self):
+    def native_value(self):
         return self._state
 
     def _map_task_type(self, task_type: str) -> str:

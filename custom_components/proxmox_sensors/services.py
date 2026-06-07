@@ -11,6 +11,7 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 _SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-\.]+\Z")
+_MAC_HEX_RE = re.compile(r"^[0-9a-fA-F]{12}\Z")
 
 
 def _validate_identifier(value: str, name: str) -> None:
@@ -413,7 +414,7 @@ def register_services(hass: HomeAssistant, entry):
             raise ValueError("MAC address is required for WOL")
 
         mac_clean = mac.replace(":", "").replace("-", "")
-        if len(mac_clean) != 12:
+        if not _MAC_HEX_RE.match(mac_clean):
             raise ValueError(f"Invalid MAC address format: {mac}")
 
         try:

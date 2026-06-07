@@ -369,7 +369,9 @@ async def create_proxmox_coordinator(hass, entry, client):
                     version_info = await client.get_pbs_version(hass) or {}
                     result["pbs_version"] = version_info.get("version")
                     result["pbs_release"] = version_info.get("release")
-                    result["pbs_auth_status"] = "OK" if version_info else "ERROR"
+                    result["pbs_auth_status"] = (
+                        "OK" if version_info.get("version") else "ERROR"
+                    )
 
                     if enable_pbs_tasks:
                         tasks = await client.get_pbs_tasks(hass) or []

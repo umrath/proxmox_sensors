@@ -316,8 +316,25 @@ class ProxmoxClient:
         data = {"command": "reboot"}
         return await self.post(hass, path, data)
 
+    def _sidecar_host(self) -> str:
+        """Host without any embedded port, for the sidecar (port 9000) URLs.
+
+        ``self._host`` may carry the PVE/PBS API port (e.g. ``pve.local:8006``);
+        appending ``:9000`` to that would produce an invalid URL. The Proxmox API
+        port lives in ``self._port``, so any colon in the host is an embedded port
+        and must be stripped first.
+        """
+        host = self._host
+        # Bracketed IPv6 literal, with or without a trailing port: [::1] / [::1]:8006
+        if host.startswith("["):
+            return host[: host.index("]") + 1] if "]" in host else host
+        # hostname / IPv4 with a single optional :port suffix
+        if host.count(":") == 1:
+            return host.split(":", 1)[0]
+        return host
+
     async def get_lm_sensors_http(self, hass, node: str):
-        url = f"http://{self._host}:9000/sensors"
+        url = f"http://{self._sidecar_host()}:9000/sensors"
 
         def _fetch():
             try:
@@ -330,7 +347,7 @@ class ProxmoxClient:
         return await hass.async_add_executor_job(_fetch)
 
     async def get_smart_data_http(self, hass, node: str):
-        url = f"http://{self._host}:9000/smart"
+        url = f"http://{self._sidecar_host()}:9000/smart"
 
         def _fetch():
             try:
@@ -343,7 +360,7 @@ class ProxmoxClient:
         return await hass.async_add_executor_job(_fetch)
 
     async def get_memory_http(self, hass, node: str):
-        url = f"http://{self._host}:9000/memory"
+        url = f"http://{self._sidecar_host()}:9000/memory"
 
         def _fetch():
             try:
@@ -359,7 +376,7 @@ class ProxmoxClient:
         return await hass.async_add_executor_job(self._get_mounts_sync)
 
     def _get_mounts_sync(self):
-        url = f"http://{self._host}:9000/mounts"
+        url = f"http://{self._sidecar_host()}:9000/mounts"
 
         try:
             r = requests.get(url, timeout=15)
