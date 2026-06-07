@@ -68,6 +68,7 @@ class _DataUpdateCoordinator:
         self.data = {}
         self.config_entry = MagicMock()
         self.config_entry.data = {}
+        self.update_method = kwargs.get("update_method")
 
     def async_add_listener(self, cb):
         pass
@@ -135,6 +136,11 @@ _ha_bs = _make_module("homeassistant.components.binary_sensor")
 _ha_bs.BinarySensorEntity = object
 _ha_comp.binary_sensor = _ha_bs
 
+# homeassistant.components.button
+_ha_btn = _make_module("homeassistant.components.button")
+_ha_btn.ButtonEntity = object
+_ha_comp.button = _ha_btn
+
 # homeassistant.components.persistent_notification
 _ha_pn = _make_module("homeassistant.components.persistent_notification")
 _ha_pn.create = MagicMock()
@@ -168,7 +174,13 @@ class _ConfigFlowBase:
     def __init_subclass__(cls, domain=None, **kwargs):
         super().__init_subclass__(**kwargs)
 
+class _OptionsFlowBase:
+    """Minimal OptionsFlow base so options_flow.py can be imported in tests."""
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
 _ha_ce.ConfigFlow = _ConfigFlowBase
+_ha_ce.OptionsFlow = _OptionsFlowBase
 _ha.config_entries = _ha_ce
 
 # homeassistant.exceptions

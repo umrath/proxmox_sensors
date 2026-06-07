@@ -679,7 +679,7 @@ class ProxmoxBackupHealthSensor(ProxmoxRestoredBackupSensor):
 
     @property
     def icon(self):
-        state = self.state
+        state = self.native_value
 
         if state == "healthy":
             return "mdi:shield-check"

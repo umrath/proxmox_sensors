@@ -4,6 +4,67 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.15] - 2026-06-07
+
+### Fixed
+
+- **K1 — PBS prune zerstörte alle Backups außer dem letzten** (`pbs_actions.py`) —
+  `run_prune` iterierte über alle Namespaces und führte pro Gruppe `prune?keep-last=1`
+  aus, was unwiderruflich Backups löschte und die im Datastore konfigurierten Retention-
+  Regeln ignorierte. Ersetzt durch `prune-datastore`-Endpunkt, der die Datastore-eigenen
+  Retention-Settings respektiert.
+
+- **K2 — `entry`-Parameter in `button.py` wurde überschrieben** (`button.py`) —
+  `entry = coordinator.config_entry` überschrieb den Funktionsparameter `entry` still,
+  sodass nachfolgende Referenzen auf den Funktionsparameter auf ein falsches Objekt zeigten.
+  Redundante Zuweisung entfernt.
+
+- **K3 — WOL-Button sendete kein Magic Packet** (`button.py`) —
+  `ProxmoxNodeButton.async_press()` behandelte den `"wake"`-Befehl nicht und führte
+  stattdessen den Shutdown/Reboot-Pfad aus (oder tat nichts). WOL-Handling via
+  `wake_on_lan.send_magic_packet` ergänzt; MAC-Adresse wird aus `entry.options["wol_macs"]`
+  gelesen.
+
+- **K4 — Alle Backup-Jobs bekamen denselben letzten Task-Status** (`coordinator.py`) —
+  `_build_backup_jobs_payload` wählte den neuesten Task global aus und wies ihn allen Jobs zu.
+  Jobs mit mehreren gesicherten VMs oder im selben Zeitraum sahen damit fremde Statusinformationen.
+  Tasks werden jetzt per VMID indexiert; jeder Job bekommt den neuesten Task für seine
+  konfigurierten VMIDs.
+
+- **M1/N2 — Dead Code `limited_task_func`** (`coordinator.py`) —
+  Funktion referenzierte das nicht-existente globale Semaphore `SEM` und warf bei jedem
+  Aufruf einen `NameError`. Entfernt.
+
+- **M2 — Disks ohne `model`-Feld wurden lautlos ignoriert** (`sensor/__init__.py`) —
+  Die Bedingung `if d_model and "boot" not in d_model` übersprach Disks mit leerem oder
+  fehlendem Model-Feld. Bedingung korrigiert: nur Disks mit `"boot"` im Model-Feld werden
+  übersprungen; modellose Disks erhalten `d_id` als Label.
+
+- **M4 — `ProxmoxPBSLastBackupSizeSensor.native_value` warf `TypeError` bei `size=None`**
+  (`sensor/pbs.py`) — `None / (1024**3)` erzeugte einen `TypeError`. Fallback auf `0`
+  ergänzt; gibt `None` zurück wenn keine Backup-Größe vorhanden.
+
+- **M6 — `ProxmoxFailedTasksSensor` lieferte immer 0** (`coordinator.py`) —
+  Der Cluster-Coordinator speicherte `cluster_tasks` nicht im Ergebnis-Dict, der Sensor
+  las daher immer eine leere Liste. `cluster_tasks` wird jetzt explizit unter dem Schlüssel
+  `"cluster_tasks"` gespeichert.
+
+- **M7 — `datetime.now()` ohne UTC in Coordinator** (`coordinator.py`) —
+  Drei Vorkommen von `datetime.now().strftime(...)` erzeugten naiven lokalen Timestamp-Strings,
+  die je nach Server-Zeitzone inkonsistent waren. Geändert zu
+  `datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")`.
+
+- **M8 — WOL-MACs wurden nach Options-Speicherung gelöscht** (`options_flow.py`) —
+  `async_update_entry(options={"wol_macs": ...})` setzte MACs korrekt, aber das sofort
+  folgende `async_create_entry(data={})` überschrieb die Options mit einem leeren Dict.
+  MACs werden jetzt korrekt via `async_create_entry(data={"wol_macs": wol_macs})`
+  persistiert; redundanter `async_reload`-Aufruf entfernt.
+
+- **N4 — `ProxmoxBackupHealthSensor.icon` verwendete `self.state` statt `self.native_value`**
+  (`sensor/cluster.py`) — `self.state` gibt `"unavailable"` zurück solange die Entity nicht
+  in der HA-Registry registriert ist, was zu falschen Icon-Anzeigen während der ersten
+  Aktualisierung führte. Auf `self.native_value` umgestellt.
+
 ## [4.0.14] - 2026-06-07
 
 ### Fixed

@@ -14,28 +14,14 @@ async def run_gc(client, hass, datastore: str):
 
 
 async def run_prune(client, hass, datastore: str):
+    """Prune the datastore using its configured retention policy.
+
+    Uses prune-datastore rather than per-group prune so the datastore's
+    own retention settings are respected instead of an arbitrary keep-last=1.
+    """
     _LOGGER.info("PBS: Running automatic PRUNE in %s", datastore)
-
-    snapshots = await client.pbs_get(hass, f"{BASE}/{datastore}/snapshots")
-    if not snapshots:
-        _LOGGER.warning("PBS: There are no snapshots in %s", datastore)
-        return None
-
-    groups = set()
-    for snap in snapshots:
-        btype = snap.get("backup-type")
-        bid = snap.get("backup-id")
-        if btype and bid:
-            groups.add((btype, bid))
-
-    results = []
-    for btype, bid in groups:
-        endpoint = f"{BASE}/{datastore}/prune"
-        data = {"backup-type": btype, "backup-id": bid, "keep-last": 1}
-        res = await client.pbs_post(hass, endpoint, data)
-        results.append(res)
-
-    return results
+    endpoint = f"{BASE}/{datastore}/prune-datastore"
+    return await client.pbs_post(hass, endpoint)
 
 
 async def run_verify(client, hass, datastore: str):

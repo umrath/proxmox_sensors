@@ -53,7 +53,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
             name=f"1. Node: {node}",
         )
 
-        entry = coordinator.config_entry
         wol_macs = entry.options.get("wol_macs", {})
 
         # -------- NODE CONTROL BUTTONS --------
@@ -572,6 +571,10 @@ class ProxmoxNodeButton(CoordinatorEntity, ButtonEntity):
         }
 
     async def async_press(self):
+        if self._command == "wake":
+            await self._send_wol()
+            return
+
         try:
             if hasattr(self._client, "execute_node_command"):
                 result = await self._client.execute_node_command(
@@ -594,3 +597,20 @@ class ProxmoxNodeButton(CoordinatorEntity, ButtonEntity):
             _LOGGER.error(
                 "Error executing %s on node %s: %s", self._command, self._node, e
             )
+
+    async def _send_wol(self):
+        try:
+            wol_macs = self.coordinator.config_entry.options.get("wol_macs", {})
+            mac = wol_macs.get(self._node)
+            if not mac:
+                _LOGGER.error("No MAC address configured for WOL on node %s", self._node)
+                return
+            _LOGGER.info("Sending WOL packet to node %s (%s)", self._node, mac)
+            await self.hass.services.async_call(
+                "wake_on_lan",
+                "send_magic_packet",
+                {"mac": mac},
+                blocking=True,
+            )
+        except Exception as e:
+            _LOGGER.error("Error sending WOL to node %s: %s", self._node, e)

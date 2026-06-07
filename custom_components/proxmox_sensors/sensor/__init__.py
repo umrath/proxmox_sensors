@@ -372,12 +372,13 @@ async def async_setup_entry(
         if enable_physical_disks:
             for d_id, d_info in c_data.get("disks", {}).items():
                 d_model = str(d_info.get("model", "")).lower()
-                if d_model and "boot" not in d_model:
-                    entities.append(
-                        ProxmoxDiskSensor(
-                            coordinator, d_id, node, d_info.get("model") or d_id
-                        )
+                if "boot" in d_model:
+                    continue
+                entities.append(
+                    ProxmoxDiskSensor(
+                        coordinator, d_id, node, d_info.get("model") or d_id
                     )
+                )
 
         # Storage pools
         storage_map = c_data.get("storage", {})

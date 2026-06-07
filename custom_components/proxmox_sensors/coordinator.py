@@ -125,11 +125,6 @@ def _normalize_api_dict(payload):
     return {}
 
 
-async def limited_task_func(func, *args):
-    async with SEM:
-        return await func(*args)
-
-
 def _log_cluster_fetch_error(field: str, err: Exception) -> None:
     """Log non-fatal cluster fetch errors without failing the whole update."""
     _LOGGER.warning("Failed to fetch %s: %s", field, err)
@@ -160,22 +155,22 @@ def _build_backup_jobs_payload(jobs, tasks):
             reverse=True,
         )[:20]
 
-    latest_task = None
-    latest_task_time = 0
-
+    # Build per-vmid lookup: vmid_str -> most recent vzdump task
+    task_by_vmid: dict = {}
     for task in tasks:
         if not isinstance(task, dict):
             continue
-
         upid = task.get("upid", "")
         if "vzdump" not in upid:
             continue
-
+        parts = upid.split(":")
+        vmid_str = parts[6] if len(parts) >= 7 else str(task.get("id", ""))
+        if not vmid_str:
+            continue
         task_time = task.get("endtime") or task.get("starttime") or 0
-
-        if task_time >= latest_task_time:
-            latest_task = task
-            latest_task_time = task_time
+        existing = task_by_vmid.get(vmid_str)
+        if existing is None or task_time > (existing.get("endtime") or existing.get("starttime") or 0):
+            task_by_vmid[vmid_str] = task
 
     normalized_jobs = []
     failed_jobs = 0
@@ -187,7 +182,17 @@ def _build_backup_jobs_payload(jobs, tasks):
         if not isinstance(job, dict):
             continue
 
-        matched_task = latest_task or {}
+        # Match to the most recent task for any VMID in this job
+        job_vmids = [v.strip() for v in str(job.get("vmid", "")).split(",") if v.strip()]
+        matched_task = {}
+        best_time = -1
+        for vmid_str in job_vmids:
+            candidate = task_by_vmid.get(vmid_str)
+            if candidate:
+                t = candidate.get("endtime") or candidate.get("starttime") or 0
+                if t > best_time:
+                    best_time = t
+                    matched_task = candidate
 
         starttime = matched_task.get("starttime")
         endtime = matched_task.get("endtime")
@@ -372,7 +377,7 @@ async def create_proxmox_coordinator(hass, entry, client):
                     else:
                         result["pbs_tasks"] = []
 
-                    result["last_update"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    result["last_update"] = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
                     return result
 
                 # ==========PVE================
@@ -657,7 +662,7 @@ async def create_proxmox_coordinator(hass, entry, client):
                                 "dimms": {},
                             }
 
-                    result["last_update"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    result["last_update"] = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
                     return result
 
         except Exception as err:
@@ -721,15 +726,17 @@ async def create_cluster_coordinator(hass, entry, client):
                     if not isinstance(cluster_firewall, Exception)
                     else {}
                 )
+                cluster_tasks = backup_tasks if not isinstance(backup_tasks, Exception) else []
+                result["cluster_tasks"] = cluster_tasks if isinstance(cluster_tasks, list) else []
                 result["backup_jobs"] = _build_backup_jobs_payload(
                     backup_jobs if not isinstance(backup_jobs, Exception) else [],
-                    backup_tasks if not isinstance(backup_tasks, Exception) else [],
+                    result["cluster_tasks"],
                 )
 
         except Exception as err:
             raise UpdateFailed(f"Cluster update error: {err}")
 
-        result["last_update"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        result["last_update"] = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         return result
 
     coordinator = DataUpdateCoordinator(

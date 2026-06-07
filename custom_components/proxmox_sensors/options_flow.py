@@ -146,10 +146,8 @@ class ProxmoxOptionsFlow(config_entries.OptionsFlow):
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
                 data=new_data,
-                options={"wol_macs": wol_macs},
             )
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-            return self.async_create_entry(title="", data={})
+            return self.async_create_entry(title="", data={"wol_macs": wol_macs})
 
         # Load resources via API
         client = ProxmoxClient(

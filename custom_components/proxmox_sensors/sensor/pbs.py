@@ -553,7 +553,9 @@ class ProxmoxPBSLastBackupSizeSensor(ProxmoxPbsBaseSensor):
     def _get_value(self):
         data = self.coordinator.data.get("pbs_datastores", {}).get(self._store, {})
         last = data.get("last_backup")
-        size = last.get("size") if last else 0
+        size = (last.get("size") or 0) if last else 0
+        if not size:
+            return None
         return round(size / (1024**3), 2)
 
     @property
