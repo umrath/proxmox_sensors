@@ -4,6 +4,21 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.8] - 2026-06-07
+
+### Security
+
+- **Service call parameters `node` and `storage` were not validated** — a crafted
+  service call with `node: "../../etc/proxmox"` or `storage: "local;rm -rf /"` would
+  have passed the node/storage strings directly into Proxmox API URL paths, enabling
+  path-traversal and command-injection attempts.
+
+  Fix: Added `_validate_identifier(value, name)` which rejects any value not matching
+  `^[a-zA-Z0-9_\-\.]+\Z` (alphanumeric, dash, underscore, dot). Both `handle_backup_all`
+  and `handle_create_vzdump_backup` now validate `node` and `storage` before any further
+  processing. The regex uses `\Z` (not `$`) to prevent Python's `re` from silently
+  accepting a trailing newline.
+
 ## [4.0.7] - 2026-06-07
 
 ### Fixed

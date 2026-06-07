@@ -2,12 +2,23 @@
 
 import logging
 import asyncio
+import re
 from homeassistant.components import persistent_notification
 from homeassistant.core import HomeAssistant, ServiceCall
 
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+_SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-\.]+\Z")
+
+
+def _validate_identifier(value: str, name: str) -> None:
+    """Raise ValueError if *value* is not a safe Proxmox node/storage identifier."""
+    if not value or not _SAFE_ID_RE.match(value):
+        raise ValueError(
+            f"Invalid {name}: {value!r}. Only alphanumeric, dash, underscore, dot allowed."
+        )
 
 
 def _find_entry_for_node(hass: HomeAssistant, node: str):
@@ -53,7 +64,10 @@ def register_services(hass: HomeAssistant, entry):
         if not storage:
             raise ValueError("Storage is required")
 
-        storage = str(storage).strip().replace("\n", "").replace("\r", "")
+        node = str(node).strip()
+        storage = str(storage).strip()
+        _validate_identifier(node, "node")
+        _validate_identifier(storage, "storage")
 
         if isinstance(guests, str):
             guests = [g.strip() for g in guests.split(",") if g.strip()]
@@ -129,7 +143,10 @@ def register_services(hass: HomeAssistant, entry):
         if not storage:
             raise ValueError("Storage is required")
 
-        storage = str(storage).strip().replace("\n", "").replace("\r", "")
+        node = str(node).strip()
+        storage = str(storage).strip()
+        _validate_identifier(node, "node")
+        _validate_identifier(storage, "storage")
 
         # Validate mode values
         valid_modes = ["snapshot", "suspend", "stop"]
