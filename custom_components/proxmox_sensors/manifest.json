@@ -2,13 +2,13 @@
   "domain": "proxmox_sensors",
   "name": "Proxmox Extended Sensors",
 
-  "codeowners": ["@Javisen"],
+  "codeowners": ["@umrath"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/Javisen/proxmox_sensors",
+  "documentation": "https://github.com/umrath/proxmox_sensors",
   "integration_type": "hub",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/Javisen/proxmox_sensors/issues",
+  "issue_tracker": "https://github.com/umrath/proxmox_sensors/issues",
   "loggers": ["custom_components.proxmox_sensors"],
   "requirements": [
     "aiohttp>=3.9.0",

@@ -25,7 +25,7 @@
 ---
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Javisen/proxmox_sensors/main/img/logo_int_v4.png" alt="Логотип Proxmox Extended Sensors" width="600"/>
+  <img src="https://raw.githubusercontent.com/umrath/proxmox_sensors/main/img/logo_int_v4.png" alt="Логотип Proxmox Extended Sensors" width="600"/>
 </p>
 
 ---
@@ -342,8 +342,8 @@ HA-{{vmid}}-{{guestname}}
 ## 🤝 Вклад в развитие и сообщество
 
 Вклад приветствуется. Вы можете открывать issues или pull requests.
-Репозиторий: https://github.com/Javisen/proxmox_sensors
+Репозиторий: https://github.com/umrath/proxmox_sensors
 
 ---
 
-<p align="center"><i>Поддерживается Javisen - Лицензия MIT</i></p>
+<p align="center"><i>Originally created by <a href="https://github.com/Javisen">Javisen</a> · Fork maintained by <a href="https://github.com/umrath">umrath</a> · MIT License</i></p>

@@ -25,7 +25,7 @@ Problèmes courants, questions fréquentes et comment les résoudre.
 ---
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Javisen/proxmox_sensors/main/img/logo_int_v4.png" alt="Logo Proxmox Extended Sensors" width="600"/>
+  <img src="https://raw.githubusercontent.com/umrath/proxmox_sensors/main/img/logo_int_v4.png" alt="Logo Proxmox Extended Sensors" width="600"/>
 </p>
 
 ---
@@ -342,8 +342,8 @@ Vous trouverez ci-dessous un parcours visuel complet du processus de configurati
 ## 🤝 Contributions et communauté
 
 Les contributions sont les bienvenues. Vous pouvez ouvrir des issues ou des pull requests.
-Dépôt : https://github.com/Javisen/proxmox_sensors
+Dépôt : https://github.com/umrath/proxmox_sensors
 
 ---
 
-<p align="center"><i>Maintenu par Javisen - Licence MIT</i></p>
+<p align="center"><i>Originally created by <a href="https://github.com/Javisen">Javisen</a> · Fork maintained by <a href="https://github.com/umrath">umrath</a> · MIT License</i></p>

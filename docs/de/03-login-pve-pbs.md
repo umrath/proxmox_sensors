@@ -12,7 +12,7 @@ Da es sich um eine benutzerdefinierte Integration handelt, musst du sie zuerst z
 2. Klicke auf die **drei Punkte** (oben rechts)  
 3. Wähle **Benutzerdefinierte Repositories**  
 4. Füge dieses Repository hinzu:  
-   `https://github.com/Javisen/proxmox_sensors/`  
+   `https://github.com/umrath/proxmox_sensors/`  
 5. Wähle als **Kategorie** `Integration`  
 6. Installiere die Integration und **starte Home Assistant neu**
 

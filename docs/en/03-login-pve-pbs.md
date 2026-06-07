@@ -12,7 +12,7 @@ As this is a custom integration, you must first add it to HACS:
 2. Click the **three dots** (top right)  
 3. Select **Custom repositories**  
 4. Add this repository:  
-   `https://github.com/Javisen/proxmox_sensors/`  
+   `https://github.com/umrath/proxmox_sensors/`  
 5. In **Category**, select `Integration`  
 6. Install the integration and **restart Home Assistant**
 
