@@ -4,6 +4,14 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.13] - 2026-06-07
+
+### Fixed
+
+- **`manifest.json` version was stale** — still reported `4.0.1` (the last upstream
+  release), so HACS would not detect or offer updates for this fork. Bumped to
+  `4.0.12` to reflect the current state.
+
 ## [4.0.12] - 2026-06-07
 
 ### Added
