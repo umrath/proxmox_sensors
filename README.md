@@ -149,10 +149,26 @@ V4 cleans up your HA dashboard by automatically grouping sensors into:
 
 ### 🔹 Via HACS (Recommended)
 1. Open **HACS → Integrations**.
-2. Click **Custom repositories** and add: `https://github.com/Javisen/proxmox_sensors`
-3. Search for **“Proxmox Extended Sensors”** and install.
+2. Click **Custom repositories** and add: `https://github.com/umrath/proxmox_sensors`
+3. Search for **”Proxmox Extended Sensors”** and install.
 4. Restart Home Assistant.
 
+
+---
+
+## 🙏 Credits & Attribution
+
+This repository is a fork of the original **Proxmox Extended Sensors** integration created by
+**[Javisen](https://github.com/Javisen)** (TTMaster).
+
+All core architecture, sensor design, backup services, PBS integration, and the V4 rewrite
+originate from the upstream project at:
+
+> **[https://github.com/Javisen/proxmox_sensors](https://github.com/Javisen/proxmox_sensors)**
+
+This fork extends the original with additional bug fixes and improvements maintained by
+**[umrath](https://github.com/umrath)**. All upstream contributions remain under the original
+MIT License.
 
 ---
 
@@ -166,17 +182,16 @@ Special thanks to community members who helped test V4 across different hardware
 
 Your feedback helped make V4 significantly more robust across heterogeneous Proxmox environments.
 
-
 Special thanks to @CyberGWJ for extensive hardware testing and parser debugging contributions during the V4 development cycle.
-
 
 ---
 
 ## 🤝 Contributing & Community
 Contributions are welcome! If you find this integration useful, please consider giving the project a ⭐ on GitHub.
 
-**[Visit GitHub Repository](https://github.com/Javisen/proxmox_sensors)**
+**[Upstream Repository (Javisen)](https://github.com/Javisen/proxmox_sensors)** |
+**[This Fork (umrath)](https://github.com/umrath/proxmox_sensors)**
 
 ---
 
-<p align="center"><i>Maintained by Javisen - MIT License</i></p>
+<p align="center"><i>Originally created by <a href="https://github.com/Javisen">Javisen</a> · Fork maintained by <a href="https://github.com/umrath">umrath</a> · MIT License</i></p>
