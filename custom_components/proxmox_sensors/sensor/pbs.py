@@ -816,7 +816,8 @@ class ProxmoxPBSVerifySensor(ProxmoxPbsBaseSensor):
             return "Running"
 
         data = self.coordinator.data.get("pbs_datastores", {}).get(self._store, {})
-        last_backup = data.get("last_backup_time")
+        last_backup_entry = data.get("last_backup")
+        last_backup = last_backup_entry.get("backup-time") if last_backup_entry else None
 
         last_verify = None
         if task:

@@ -481,11 +481,18 @@ async def create_proxmox_coordinator(hass, entry, client):
                     node_status = results[idx]
                     idx += 1
 
-                    normalized = {}
-                    if isinstance(node_status, dict):
+                    if isinstance(node_status, Exception):
+                        _LOGGER.warning(
+                            "Failed to fetch node status for %s: %s",
+                            node,
+                            node_status,
+                        )
+                        result["node"] = {"status": "unknown"}
+                    elif isinstance(node_status, dict):
                         normalized = node_status.get("data", node_status)
-
-                    result["node"] = normalized or {"status": "unknown"}
+                        result["node"] = normalized or {"status": "unknown"}
+                    else:
+                        result["node"] = {"status": "unknown"}
 
                     # -------- Node updates --------
 

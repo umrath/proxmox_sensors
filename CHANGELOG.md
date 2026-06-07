@@ -4,6 +4,23 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.16] - 2026-06-07
+
+### Fixed (Second review — CRITICAL)
+
+- **C1 — `ProxmoxPBSVerifySensor` las falschen Coordinator-Schlüssel** (`sensor/pbs.py`) —
+  `_get_value` las `data.get("last_backup_time")`, ein Schlüssel den der Coordinator nie
+  setzt. Der Coordinator speichert `"last_backup"` (ein Snapshot-Dict mit `"backup-time"`-
+  Epoch). Dadurch war der "Backup neuer als letzter Verify → Pending"-Zweig toter Code und
+  der Sensor zeigte nach jedem Verify dauerhaft "OK", auch wenn neuere, ungeprüfte Backups
+  existierten. Liest jetzt `last_backup["backup-time"]`.
+
+- **C2 — Node-Status-Fehler wurde lautlos verschluckt** (`coordinator.py`) —
+  Das `asyncio.gather`-Ergebnis für `get_node_status` wurde nur per `isinstance(..., dict)`
+  geprüft. Bei einer Exception fiel der Code auf `result["node"] = {"status": "unknown"}`
+  zurück, ohne Warnung — alle Node-Metriken (CPU/RAM/etc.) zeigten 0, ohne dass der Fehler
+  sichtbar war. Exception-Fall wird jetzt explizit erkannt und als Warnung geloggt.
+
 ## [4.0.15] - 2026-06-07
 
 ### Fixed
