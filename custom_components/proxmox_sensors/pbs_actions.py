@@ -61,7 +61,13 @@ async def run_sync(client, hass, datastore: str):
 
     for remote in remotes:
         name = remote.get("name")
-        stores = remote.get("store", [])
+        raw_store = remote.get("store")
+        if isinstance(raw_store, str):
+            stores = [raw_store] if raw_store else []
+        elif isinstance(raw_store, list):
+            stores = raw_store
+        else:
+            stores = []
 
         for store in stores:
             endpoint = f"{BASE}/{datastore}/sync"

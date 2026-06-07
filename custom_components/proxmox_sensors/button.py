@@ -182,17 +182,8 @@ class PBSBaseButton(CoordinatorEntity, ButtonEntity):
     def __init__(self, coordinator, client, datastore, command_name, command_display):
         super().__init__(coordinator)
 
-        clean_datastore = (
-            datastore.lower()
-            .replace("-", "_")
-            .replace(" ", "_")
-        )
-
         self._client = client
         self._datastore = datastore
-
-        # ONLY for HA entity_id safety
-        self._sensor_entity_id = f"sensor.{clean_datastore}_last_action"
 
         self._command_name = command_name
         self._command_display = command_display
@@ -211,9 +202,6 @@ class PBSBaseButton(CoordinatorEntity, ButtonEntity):
     def available(self):
         return self.coordinator.last_update_success
 
-    def _update_last_action(self, message: str):
-        self.hass.states.async_set(self._sensor_entity_id, message)
-
 
 class PBSGCButton(PBSBaseButton):
     """Garbage Collection button for PBS datastore."""
@@ -224,7 +212,6 @@ class PBSGCButton(PBSBaseButton):
 
     async def async_press(self):
         await run_gc(self._client, self.hass, self._datastore)
-        self._update_last_action("GC OK")
         await self.coordinator.async_request_refresh()
 
 
@@ -237,7 +224,6 @@ class PBSPruneButton(PBSBaseButton):
 
     async def async_press(self):
         await run_prune(self._client, self.hass, self._datastore)
-        self._update_last_action("Prune OK")
         await self.coordinator.async_request_refresh()
 
 
@@ -250,7 +236,6 @@ class PBSVerifyButton(PBSBaseButton):
 
     async def async_press(self):
         await run_verify(self._client, self.hass, self._datastore)
-        self._update_last_action("Verify OK")
         await self.coordinator.async_request_refresh()
 
 
@@ -263,7 +248,6 @@ class PBSSyncButton(PBSBaseButton):
 
     async def async_press(self):
         await run_sync(self._client, self.hass, self._datastore)
-        self._update_last_action("Sync OK")
         await self.coordinator.async_request_refresh()
 
 

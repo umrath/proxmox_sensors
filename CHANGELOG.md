@@ -4,6 +4,34 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.0.17] - 2026-06-07
+
+### Fixed (Second review — HIGH)
+
+- **H1 — PBS-Buttons schrieben rohen HA-State** (`button.py`) —
+  `PBSBaseButton._update_last_action` setzte via `hass.states.async_set` direkt einen
+  rohen String auf die Entity-ID des `PBSLastActionSensor`. Das umging die Entity-Registry,
+  verwarf Attribute und wurde beim nächsten Coordinator-Update sofort überschrieben
+  (Flackern). Helfer entfernt; die Buttons lösen nur noch `async_request_refresh()` aus,
+  woraufhin `PBSLastActionSensor` seinen Zustand korrekt aus `pbs_tasks` neu berechnet.
+
+- **H2 — Fehlendes `idx += 1` nach Memory-Result** (`coordinator.py`) —
+  Nach dem Lesen von `memory_data = results[idx]` wurde `idx` nicht inkrementiert. Aktuell
+  harmlos (Memory ist das letzte Result), aber inkonsistent mit jedem anderen indizierten
+  Zugriff und ein latenter Bug, falls künftig ein weiteres Result angehängt wird. Korrigiert.
+
+- **H3 — `run_sync` iterierte über Zeichen eines String-`store`-Felds** (`pbs_actions.py`) —
+  `remote.get("store", [])` liefert bei PBS-Remotes mit einem einzelnen Store einen String.
+  `for store in stores` iterierte dann über die einzelnen Zeichen und erzeugte fehlerhafte
+  Sync-Calls. `store` wird jetzt zu einer Liste normalisiert (String → Einzel-Element).
+
+- **H4 — Services wurden beim Entladen des letzten Eintrags nicht entfernt** (`__init__.py`) —
+  `async_unload_entry` entfernte `hass.data[DOMAIN]`, ließ aber die registrierten Services
+  (`backup_all`, `create_vzdump_backup`, `confirm_shutdown_node`, `confirm_reboot_node`,
+  `wake_node`) bestehen. Nach Entfernen aller Einträge schlugen Service-Aufrufe fehl, weil
+  der Domain-Key bereits weg war. Services werden jetzt entfernt, wenn der letzte Eintrag
+  entladen wird.
+
 ## [4.0.16] - 2026-06-07
 
 ### Fixed (Second review — CRITICAL)

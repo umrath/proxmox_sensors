@@ -301,5 +301,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         if not hass.data[DOMAIN]:
             hass.data.pop(DOMAIN)
+            for service in (
+                "backup_all",
+                "create_vzdump_backup",
+                "confirm_shutdown_node",
+                "confirm_reboot_node",
+                "wake_node",
+            ):
+                if hass.services.has_service(DOMAIN, service):
+                    hass.services.async_remove(DOMAIN, service)
 
     return unload_ok

@@ -645,6 +645,7 @@ async def create_proxmox_coordinator(hass, entry, client):
                     result["memory"] = {}
                     if enable_memory_monitoring:
                         memory_data = results[idx]
+                        idx += 1
                         if isinstance(memory_data, dict):
                             modules = memory_data.get("modules", [])
                             result["memory"][node] = {
