@@ -148,8 +148,14 @@ V4 cleans up your HA dashboard by automatically grouping sensors into:
 ## 🧩 Installation
 
 ### 🔹 Via HACS (Recommended)
+
+Click the button below to add this repository to HACS in one step:
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=umrath&repository=proxmox_sensors&category=integration)
+
+Or manually:
 1. Open **HACS → Integrations**.
-2. Click **Custom repositories** and add: `https://github.com/umrath/proxmox_sensors`
+2. Click **⋮ → Custom repositories** and add: `https://github.com/umrath/proxmox_sensors`
 3. Search for **”Proxmox Extended Sensors”** and install.
 4. Restart Home Assistant.
 
