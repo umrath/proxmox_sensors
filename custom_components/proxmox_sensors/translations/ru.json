@@ -409,6 +409,9 @@
       "node_updates": {
         "name": "Обновления узла"
       },
+      "node_replication": {
+        "name": "Репликация"
+      },
       "node_iowait": {
         "name": "Ожидание ввода-вывода"
       },

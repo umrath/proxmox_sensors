@@ -372,6 +372,48 @@ class ProxmoxNodeUpdatesSensor(ProxmoxBaseSensor):
         return "mdi:package-check"
 
 
+class ProxmoxNodeReplicationSensor(ProxmoxBaseSensor):
+    """Sensor for node replication job status."""
+
+    def __init__(self, coordinator, node):
+        super().__init__(
+            coordinator,
+            "node_replication",
+            None,
+            None,
+            f"p_node_replication_{node}",
+            node,
+        )
+        self._attr_translation_key = "node_replication"
+
+    def _replication(self) -> dict:
+        data = self.coordinator.data.get("replication", {})
+        return data if isinstance(data, dict) else {}
+
+    def _get_value(self):
+        return self._replication().get("state", "unknown")
+
+    @property
+    def extra_state_attributes(self):
+        data = self._replication()
+        return {
+            "total_jobs": data.get("total_jobs", 0),
+            "failed_jobs": data.get("failed_jobs", 0),
+            "last_sync": data.get("last_sync"),
+            "jobs": data.get("jobs", []),
+        }
+
+    @property
+    def icon(self):
+        state = self._replication().get("state", "unknown")
+
+        if state == "ok":
+            return "mdi:check-circle"
+        if state == "error":
+            return "mdi:close-circle"
+        return "mdi:help-circle"
+
+
 class ProxmoxNodesSensor(CoordinatorEntity, SensorEntity):
     """Sensor that shows configured node and its statistics."""
 

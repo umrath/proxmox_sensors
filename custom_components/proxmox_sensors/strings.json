@@ -409,6 +409,9 @@
       "node_updates": {
         "name": "Node Updates"
       },
+      "node_replication": {
+        "name": "Replication"
+      },
       "node_iowait": {
         "name": "IO Wait"
       },

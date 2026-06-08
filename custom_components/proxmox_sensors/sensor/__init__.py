@@ -23,6 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 from .node import (
     ProxmoxNodeSensor,
     ProxmoxNodeUpdatesSensor,
+    ProxmoxNodeReplicationSensor,
     ProxmoxCPUInfoSensor,
     ProxmoxKSMSensor,
     ProxmoxMemorySensor,
@@ -341,6 +342,7 @@ async def async_setup_entry(
         if node_data:
             entities.append(ProxmoxClusterTasksSensor(coordinator, node))
             entities.append(ProxmoxNodeUpdatesSensor(coordinator, node))
+            entities.append(ProxmoxNodeReplicationSensor(coordinator, node))
 
             entities.append(ProxmoxNodeIOWaitSensor(coordinator, node))
             entities.append(ProxmoxNodeLoadAverageSensor(coordinator, node))

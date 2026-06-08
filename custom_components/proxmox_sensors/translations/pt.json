@@ -409,6 +409,9 @@
       "node_updates": {
         "name": "Atualizações do Nó"
       },
+      "node_replication": {
+        "name": "Replicação"
+      },
       "node_iowait": {
         "name": "Espera E/S"
       },

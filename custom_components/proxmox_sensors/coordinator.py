@@ -270,6 +270,82 @@ def _build_backup_jobs_payload(jobs, tasks):
     }
 
 
+def _build_replication_payload(jobs):
+    """Build a safe replication summary from a node's replication jobs."""
+    if not isinstance(jobs, list):
+        jobs = []
+
+    normalized_jobs = []
+    failed_jobs = 0
+    last_sync_ts = None
+
+    for index, job in enumerate(jobs):
+        if not isinstance(job, dict):
+            continue
+
+        fail_count = job.get("fail_count")
+        try:
+            fail_count = int(fail_count)
+        except (TypeError, ValueError):
+            fail_count = 0
+
+        error = job.get("error")
+        if error or fail_count > 0:
+            status = "error"
+            failed_jobs += 1
+        else:
+            status = "ok"
+
+        last_sync = job.get("last_sync")
+        try:
+            last_sync_val = float(last_sync) if last_sync not in (None, "") else None
+        except (TypeError, ValueError):
+            last_sync_val = None
+
+        if last_sync_val is not None and (
+            last_sync_ts is None or last_sync_val > last_sync_ts
+        ):
+            last_sync_ts = last_sync_val
+
+        duration = job.get("duration")
+        try:
+            duration = int(duration) if duration not in (None, "") else None
+        except (TypeError, ValueError):
+            duration = None
+
+        job_id = job.get("id") or job.get("guest") or f"replication_{index}"
+
+        normalized_jobs.append(
+            {
+                "id": str(job_id),
+                "guest": str(job.get("guest")) if job.get("guest") is not None else None,
+                "target": job.get("target"),
+                "schedule": job.get("schedule") or "unknown",
+                "status": status,
+                "fail_count": fail_count,
+                "error": error or None,
+                "last_sync": _to_iso_timestamp(last_sync_val),
+                "next_sync": _to_iso_timestamp(job.get("next_sync")),
+                "duration": duration,
+            }
+        )
+
+    if not normalized_jobs:
+        state = "unknown"
+    elif failed_jobs == 0:
+        state = "ok"
+    else:
+        state = "error"
+
+    return {
+        "state": state,
+        "total_jobs": len(normalized_jobs),
+        "failed_jobs": failed_jobs,
+        "last_sync": _to_iso_timestamp(last_sync_ts),
+        "jobs": normalized_jobs,
+    }
+
+
 async def create_proxmox_coordinator(hass, entry, client):
 
     data = entry.data
@@ -460,6 +536,7 @@ async def create_proxmox_coordinator(hass, entry, client):
                         (client.get_zfs_pools, hass, node),
                         (client.get_disks, hass, node),
                         (client.get_mounts, hass, node),
+                        (client.get_replication, hass, node),
                     ]
 
                     if enable_lm_sensors:
@@ -611,6 +688,23 @@ async def create_proxmox_coordinator(hass, entry, client):
                     result["mounts"] = (
                         mounts_data if isinstance(mounts_data, dict) else {}
                     )
+
+                    # -------- Replication --------
+
+                    replication_data = results[idx]
+                    idx += 1
+
+                    if isinstance(replication_data, Exception):
+                        _LOGGER.warning(
+                            "Failed to fetch replication for %s: %s",
+                            node,
+                            replication_data,
+                        )
+                        result["replication"] = _build_replication_payload([])
+                    else:
+                        result["replication"] = _build_replication_payload(
+                            replication_data
+                        )
 
                     # -------- Disks --------
 

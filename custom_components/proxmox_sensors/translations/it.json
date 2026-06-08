@@ -409,6 +409,9 @@
       "node_updates": {
         "name": "Aggiornamenti Nodo"
       },
+      "node_replication": {
+        "name": "Replica"
+      },
       "node_iowait": {
         "name": "Attesa I/O"
       },

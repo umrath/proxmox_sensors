@@ -240,6 +240,9 @@ class ProxmoxClient:
     async def get_disks(self, hass, node: str):
         return await self.get(hass, f"nodes/{node}/disks/list") or []
 
+    async def get_replication(self, hass, node: str):
+        return await self.get(hass, f"nodes/{node}/replication") or []
+
     async def control_vm(self, hass, node: str, vmid: str, command: str):
         valid_vm_commands = [
             "start",

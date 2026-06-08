@@ -409,6 +409,9 @@
       "node_updates": {
         "name": "Knoten-Updates"
       },
+      "node_replication": {
+        "name": "Replikation"
+      },
       "node_iowait": {
         "name": "E/A-Wartezeit"
       },

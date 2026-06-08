@@ -409,6 +409,9 @@
       "node_updates": {
         "name": "Оновлення вузла"
       },
+      "node_replication": {
+        "name": "Реплікація"
+      },
       "node_iowait": {
         "name": "Очікування введення-виведення"
       },

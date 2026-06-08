@@ -409,6 +409,9 @@
       "node_updates": {
         "name": "Knooppuntupdates"
       },
+      "node_replication": {
+        "name": "Replicatie"
+      },
       "node_iowait": {
         "name": "I/O-wacht"
       },

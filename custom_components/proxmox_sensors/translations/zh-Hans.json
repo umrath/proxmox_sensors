@@ -409,6 +409,9 @@
       "node_updates": {
         "name": "更新数量"
       },
+      "node_replication": {
+        "name": "复制"
+      },
       "node_iowait": {
         "name": "IO 等待"
       },

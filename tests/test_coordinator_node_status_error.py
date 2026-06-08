@@ -30,6 +30,7 @@ def _make_pve_client():
     client.get_zfs_pools = AsyncMock(return_value=[])
     client.get_disks = AsyncMock(return_value=[])
     client.get_mounts = AsyncMock(return_value={})
+    client.get_replication = AsyncMock(return_value=[])
     return client
 
 

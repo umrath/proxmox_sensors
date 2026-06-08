@@ -4,6 +4,21 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-06-08
+
+### Added
+
+- **Replikationsstatus-Sensor** (`sensor/node.py`, `coordinator.py`, `api.py`) —
+  Neuer Knoten-Sensor `Replikation`, der den Zustand der PVE-Speicherreplikation
+  (`GET /nodes/{node}/replication`) abbildet. Der Sensorzustand ist `ok` (alle
+  Replikationsjobs erfolgreich), `error` (mindestens ein Job mit `fail_count > 0`
+  oder gesetztem `error`) bzw. `unknown` (keine Replikationsjobs konfiguriert).
+  Die Attribute enthalten `total_jobs`, `failed_jobs`, den jüngsten `last_sync`
+  sowie eine `jobs`-Liste mit je Gast, Ziel, Zeitplan, Status, Fehlerzähler,
+  Fehlertext, letzter/nächster Synchronisation und Dauer. Zeitstempel werden in
+  UTC nach ISO-8601 normalisiert. Übersetzungen für alle unterstützten Sprachen
+  ergänzt.
+
 ## [4.0.19] - 2026-06-07
 
 ### Fixed (Second review — LOW)

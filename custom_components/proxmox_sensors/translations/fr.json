@@ -409,6 +409,9 @@
       "node_updates": {
         "name": "Mises à jour du nœud"
       },
+      "node_replication": {
+        "name": "Réplication"
+      },
       "node_iowait": {
         "name": "Attente E/S"
       },
