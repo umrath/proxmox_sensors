@@ -144,6 +144,19 @@ class ProxmoxClient:
                 if isinstance(err, requests.exceptions.RequestException):
                     raise CannotConnect(f"PVE request failed for {path}") from err
                 raise
+
+            # Connection failures are expected when a node is powered off.
+            if isinstance(
+                err,
+                (
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.ConnectTimeout,
+                    requests.exceptions.Timeout,
+                ),
+            ):
+                LOGGER.debug("PVE node unreachable while requesting %s: %s", path, err)
+                return None
+
             LOGGER.error("PVE GET error on %s: %s", path, err)
             return None
 

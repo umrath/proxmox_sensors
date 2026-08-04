@@ -1,5 +1,7 @@
 """Hardware sensors for Proxmox Extended Sensors."""
 
+import re
+
 from .base import ProxmoxBaseSensor
 from ..const import DOMAIN
 
@@ -27,6 +29,8 @@ class ProxmoxHardwareSensor(ProxmoxBaseSensor):
             ]
         )
 
+        self._sensor_type = self._detect_sensor_type(coordinator)
+
         if self._is_cpu:
             unique_id = f"proxmox_cpu_temp_{node}"
             unit = "°C"
@@ -34,7 +38,12 @@ class ProxmoxHardwareSensor(ProxmoxBaseSensor):
         else:
             clean_id = self._key.replace(" ", "_").replace("-", "_")
             unique_id = f"proxmox_hw_{node}_{clean_id}"
-            unit = "°C"
+            if self._sensor_type == "voltage":
+                unit = "V"
+            elif self._sensor_type == "fan":
+                unit = "RPM"
+            else:
+                unit = "°C"
             sensor_id = sensor_key
 
         super().__init__(coordinator, sensor_id, None, unit, unique_id, node)
@@ -46,9 +55,16 @@ class ProxmoxHardwareSensor(ProxmoxBaseSensor):
                 "name": sensor_key.replace("_", " ").replace("-", " ").title()
             }
 
-        self._attr_device_class = "temperature"
+        if self._sensor_type == "voltage":
+            self._attr_device_class = "voltage"
+            self._attr_icon = "mdi:flash"
+        elif self._sensor_type == "fan":
+            self._attr_icon = "mdi:fan"
+        else:
+            self._attr_device_class = "temperature"
+            self._attr_icon = "mdi:thermometer-lines"
+
         self._attr_state_class = "measurement"
-        self._attr_icon = "mdi:thermometer-lines"
 
     # ================= MAIN VALUE ==================
 
@@ -203,17 +219,103 @@ class ProxmoxHardwareSensor(ProxmoxBaseSensor):
 
     # ================= HELPERS ==================
 
+    def _detect_sensor_type(self, coordinator):
+        """Classify a reading as fan / voltage / temperature by its input key.
+
+        The aggregated CPU sensor and the chipset sensor always represent a
+        temperature, even when the key that constructed them is a fan/voltage
+        rail whose lm-sensors label happens to contain a CPU substring
+        (e.g. ``Vcore``, ``CPU Fan``). Forcing ``temperature`` here keeps the
+        CPU aggregation in ``_parse`` reading ``tempN_input`` values.
+        """
+        if self._is_chipset or self._is_cpu:
+            return "temperature"
+
+        hw = coordinator.data.get("hardware", {})
+        val = hw.get(self._key)
+
+        if isinstance(val, dict):
+            keys = [str(k).lower() for k in val]
+
+            if any(re.match(r"^fan\d+_input$", k) for k in keys):
+                return "fan"
+
+            if any(re.match(r"^in\d+_input$", k) for k in keys):
+                return "voltage"
+
+        return "temperature"
+
+    def is_meaningful(self) -> bool:
+        """Curate voltage/fan entities: drop dead or implausible rails."""
+        if self._sensor_type == "temperature":
+            return True
+
+        val = self._get_value()
+        if val is None:
+            return False
+
+        if self._sensor_type == "fan":
+            return val > 0
+
+        if self._sensor_type == "voltage":
+            return 0 < val <= 30
+
+        return True
+
     def _parse(self, val):
         try:
             # If dict (lm-sensors style)
             if isinstance(val, dict):
+                parsed = None
+
                 for k, v in val.items():
-                    if "input" in k.lower():
-                        val = v
+                    kl = k.lower()
+
+                    if self._sensor_type == "fan":
+                        if re.match(r"^fan\d+_input$", kl):
+                            parsed = v
+                            break
+
+                    elif self._sensor_type == "voltage":
+                        if re.match(r"^in\d+_input$", kl):
+                            parsed = v
+                            break
+
+                    elif re.match(r"^temp\d+_input$", kl):
+                        parsed = v
                         break
 
+                # Fallback for temperature chips that use a non-standard input
+                # key. Fan/voltage inputs are excluded so a rail whose lm-sensors
+                # label contains a CPU substring (e.g. "Vcore") cannot leak into
+                # the aggregated CPU temperature as a bogus °C value.
+                if parsed is None and self._sensor_type == "temperature":
+                    for k, v in val.items():
+                        kl = k.lower()
+                        if re.match(r"^fan\d+_input$", kl) or re.match(
+                            r"^in\d+_input$", kl
+                        ):
+                            continue
+                        if "input" in kl:
+                            parsed = v
+                            break
+
+                if parsed is None:
+                    return None
+
+                val = parsed
+
             f = float(val)
-            if 1 < f < 145:
+
+            if self._sensor_type == "fan":
+                if f >= 0:
+                    return round(f)
+
+            elif self._sensor_type == "voltage":
+                if f >= 0:
+                    return round(f, 3)
+
+            elif 1 < f < 145:
                 return round(f, 1)
         except Exception:
             pass

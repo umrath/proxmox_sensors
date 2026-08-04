@@ -328,7 +328,7 @@ async def async_setup_entry(
 
                 # ---------------- REMAINING ----------------
                 sensor = ProxmoxHardwareSensor(coordinator, key, node)
-                if sensor.is_valid():
+                if sensor.is_valid() and sensor.is_meaningful():
                     entities.append(sensor)
 
         # -------- Memory --------

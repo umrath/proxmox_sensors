@@ -4,6 +4,63 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-08-04
+
+Selektive Übernahme der Upstream-Änderungen (`Javisen/proxmox_sensors`,
+Commit `9a6b7e3` „Fix node detection and improve hardware sensors"). Die
+Upstream-Version-Bumps (4.0.2/4.0.3), der bereits vorhandene
+`config_flow.VERSION = 2`, das VM/CT-`node`-Attribut (der Fork bietet mit
+`current_node`/`migrated` mehr) sowie die fehlerhafte `get_zfs_pools`-Änderung
+(referenziert das nirgends definierte `_is_expected_no_zfs_pools_error`,
+`NameError`) wurden bewusst **nicht** übernommen.
+
+### Added
+
+- **Spannungs- und Lüfter-Sensoren** (`sensor/hardware.py`, `sensor/__init__.py`) —
+  `ProxmoxHardwareSensor` erkennt pro lm-sensors-Messwert am Input-Key den Typ:
+  `fanN_input` → Lüfter (Einheit `RPM`, Icon `mdi:fan`), `inN_input` → Spannung
+  (Einheit `V`, `device_class: voltage`, Icon `mdi:flash`), sonst Temperatur
+  (`°C`, unverändert). Zuvor wurden Lüfterdrehzahlen (> 145) durch den
+  Temperaturfilter `1 < f < 145` verworfen und Spannungen fälschlich als `°C`
+  dargestellt. Neue Kuratierung `is_meaningful()` filtert tote/unplausible Rails
+  heraus (Lüfter `== 0` RPM, Spannung `<= 0` oder `> 30` V), damit nicht dutzende
+  bedeutungslose Super-I/O-Rails als Entitäten erscheinen.
+
+### Fixed
+
+- **PVE-Knoten im Standby/ausgeschaltet erzeugten Error-Logspam** (`api.py`) —
+  `ProxmoxClient.get()` protokollierte Verbindungsfehler eines nicht erreichbaren
+  Knotens als `LOGGER.error`. Erwartete Verbindungsfehler
+  (`ConnectionError`/`ConnectTimeout`/`Timeout`) werden jetzt auf `debug`
+  herabgestuft und liefern `None`, statt bei jedem Poll-Zyklus einen Fehler zu
+  loggen.
+
+- **CPU-Aggregation las CPU-benannte Spannungs-/Lüfter-Rails als Temperatur**
+  (`sensor/hardware.py`) — Ein Super-I/O-Messwert mit CPU-Label (z. B. `Vcore`,
+  `CPU Fan`) wird von der Setup-Klassifizierung (`cpu`/`core`-Substring) zum
+  aggregierten CPU-Sensor. `_detect_sensor_type` erzwingt für `_is_cpu`/
+  `_is_chipset` nun `temperature`, und der Fallback in `_parse` überspringt
+  `fanN_input`/`inN_input`, sodass eine 1,1-V-`Vcore`-Spannung nicht mehr als
+  1,1 °C in Wert oder Attribute des CPU-Sensors einfließt.
+
+### Changed
+
+- **Auto-Node-Erkennung ohne IP-Treffer fällt auf manuelle Auswahl zurück**
+  (`config_flow.py`) — Bisher wählte der Flow bei fehlendem IP-Abgleich still
+  `nodes[0]` und konnte so in Clustern den falschen Knoten anbinden. Der
+  `nodes[0]`-Fallback entfällt; ohne Treffer erscheint jetzt die manuelle
+  Knotenauswahl.
+
+### Hinweis zur Migration
+
+- Spannungs-Rails, die zuvor im Bereich `1 < f < 145` lagen, erschienen
+  fälschlich als `°C`-Temperatur-Entitäten mit identischer `unique_id`. Nach dem
+  Update wechseln sie auf `V`/`device_class: voltage`; Home Assistant meldet
+  dafür einmalig eine „units_changed"-Reparatur (Langzeitstatistik der
+  betroffenen Entität zurücksetzen). Neue Lüfter-Entitäten, die beim ersten
+  Poll `0` RPM anzeigen (Zero-RPM-Leerlauf), werden bis zum nächsten
+  Neuladen der Integration ausgeblendet.
+
 ## [4.1.0] - 2026-06-08
 
 ### Added
