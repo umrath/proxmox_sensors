@@ -4,6 +4,39 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.2.1] - 2026-08-05
+
+### Fixed
+
+- **Ein einzelner langsamer API-Aufruf machte alle Entitäten eines Knotens
+  `unavailable`** (`coordinator.py`) — Die gesamte parallele Abfrage lief in
+  einem gemeinsamen `asyncio.timeout(30)`. Blockierte ein Aufruf (z. B.
+  `/nodes/{node}/storage`, während `pvestatd` auf einen nicht erreichbaren
+  PBS-Datastore wartete), brach der Timeout die komplette `gather()` ab, die
+  13 erfolgreichen Ergebnisse wurden verworfen und `UpdateFailed` setzte alle
+  ~120 Entitäten des Knotens gleichzeitig auf `unavailable` — bei jedem
+  Intervall erneut. Jeder Task hat jetzt sein eigenes Zeitlimit
+  (`_TASK_TIMEOUT = 20 s`): ein hängender Aufruf wird zu einer `TimeoutError`
+  in `results`, die restlichen Aufrufe befüllen weiter. Der äußere Timeout
+  (`_OUTER_TIMEOUT = 45 s`) ist nur noch ein Sicherheitsnetz.
+
+- **`UpdateFailed` bei Teilausfall ließ Entitäten flappen** (`coordinator.py`) —
+  Ein Fehler im gesamten Zyklus wirft nur noch `UpdateFailed`, wenn keine
+  Vorwerte existieren (erster Durchlauf, Host down, falsche Auth). Liegen
+  bereits Daten vor (`coordinator.data`), werden diese behalten und im
+  nächsten Intervall erneut versucht, statt alle Entitäten auf `unavailable`
+  zu setzen.
+
+- **Ergebnis-Verarbeitung stürzte bei einer `TimeoutError` ab**
+  (`coordinator.py`) — `_build_vms_dict`, `_build_cts_dict` und der
+  Storage-Aufbau iterierten über `x or []`; eine `TimeoutError` (wahrheitswert
+  `True`) ist nicht iterierbar und löste `TypeError` aus, der wiederum den
+  ganzen Zyklus scheitern ließ. Nicht-Listen werden jetzt als leer behandelt.
+
+- **PVE-Anfrage-Timeout von 30 s auf 15 s gesenkt** (`api.py`) — Ein
+  festhängender Endpunkt schlägt schneller fehl und gibt seinen Executor-Thread
+  frei, statt nahe am Gesamt-Budget des Coordinators zu blockieren.
+
 ## [4.2.0] - 2026-08-04
 
 Selektive Übernahme der Upstream-Änderungen (`Javisen/proxmox_sensors`,

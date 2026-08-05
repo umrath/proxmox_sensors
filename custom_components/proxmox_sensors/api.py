@@ -81,7 +81,10 @@ class ProxmoxClient:
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         port = self._port or 8006
-        timeout_val = 30
+        # Bound each PVE request so a stuck endpoint (e.g. pvestatd blocked on an
+        # unreachable storage) fails fast and releases its executor thread,
+        # instead of hanging near the coordinator's whole-update budget.
+        timeout_val = 15
 
         try:
             if self._token_id and self._token_secret:

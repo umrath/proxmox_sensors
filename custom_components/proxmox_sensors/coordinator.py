@@ -12,6 +12,16 @@ _LOGGER = logging.getLogger(__name__)
 
 _GUEST_FIELDS = ("cpu", "mem", "maxmem", "disk", "maxdisk", "uptime", "netin", "netout")
 
+# Per-task wall-clock cap so one hanging API call fails alone instead of
+# stalling the whole fan-out. Kept above the sidecar HTTP timeouts (5/15 s in
+# api.py) so a slow-but-valid SMART/memory read is not cut short; it is a
+# backstop — PVE calls fail earlier via the proxmoxer request timeout.
+_TASK_TIMEOUT = 20
+
+# Pure safety net around the whole update. With every task individually bounded
+# the gather can no longer hang, so this only trips on a catastrophic wedge.
+_OUTER_TIMEOUT = 45
+
 
 def _build_vms_dict(vms, cluster_resources, selected_vms, node):
     """Build the vms dict from per-node data, enriched with migrated VMs.
@@ -23,7 +33,9 @@ def _build_vms_dict(vms, cluster_resources, selected_vms, node):
     """
     vms_dict = {}
 
-    for vm in vms or []:
+    # `vms` may be an Exception (per-task timeout/failure via
+    # gather(return_exceptions=True)); treat anything non-list as empty.
+    for vm in vms if isinstance(vms, list) else []:
         vmid = vm.get("vmid")
         if vmid is None:
             continue
@@ -73,7 +85,8 @@ def _build_cts_dict(cts, cluster_resources, selected_cts, node):
     """Build the cts dict from per-node data, enriched with migrated containers."""
     cts_dict = {}
 
-    for ct in cts or []:
+    # `cts` may be an Exception (per-task timeout/failure); treat non-list as empty.
+    for ct in cts if isinstance(cts, list) else []:
         vmid = ct.get("vmid")
         if vmid is None:
             continue
@@ -368,16 +381,22 @@ async def create_proxmox_coordinator(hass, entry, client):
 
     SEM = asyncio.Semaphore(5)
 
-    async def limited_task(coro_func, *args):
+    async def limited_task(coro_func, *args, timeout=None):
+        # A per-task timeout turns a hanging call into a TimeoutError that
+        # gather(return_exceptions=True) collects like any other failure, so the
+        # remaining calls still populate instead of being cancelled with it.
         async with SEM:
-            return await coro_func(*args)
+            async with asyncio.timeout(
+                _TASK_TIMEOUT if timeout is None else timeout
+            ):
+                return await coro_func(*args)
 
     async def async_update_data():
 
         result = {"server_type": server_type}
 
         try:
-            async with asyncio.timeout(30):
+            async with asyncio.timeout(_OUTER_TIMEOUT):
 
                 # ========PBS==========
 
@@ -648,7 +667,7 @@ async def create_proxmox_coordinator(hass, entry, client):
 
                     result["storage"] = {
                         st["storage"]: st
-                        for st in storages or []
+                        for st in (storages if isinstance(storages, list) else [])
                         if isinstance(st, dict)
                         and "storage" in st
                         and (not selected_storage or st["storage"] in selected_storage)
@@ -770,6 +789,21 @@ async def create_proxmox_coordinator(hass, entry, client):
                     return result
 
         except Exception as err:
+            # A whole-cycle failure (outer safety net tripped, or an error
+            # before any result was usable) should not flap every entity of the
+            # node to `unavailable` when we still have the previous cycle's data.
+            # Keep the last-known values and try again next interval; only fail
+            # hard when nothing has ever succeeded (first update, host down,
+            # bad auth).
+            previous = getattr(coordinator, "data", None)
+            if previous:
+                _LOGGER.warning(
+                    "Coordinator update failed for %s, keeping previous data: %s",
+                    node,
+                    err,
+                )
+                return previous
+
             _LOGGER.exception("Coordinator update failure")
             raise UpdateFailed(f"Update error: {err}")
 
