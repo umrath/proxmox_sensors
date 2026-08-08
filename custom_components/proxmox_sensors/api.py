@@ -67,6 +67,9 @@ class ProxmoxClient:
         self._port = port
         self._verify_ssl = verify_ssl
         self._proxmox: Optional[ProxmoxAPI] = None
+        # Sidecar endpoints already warned about, so a down service is logged
+        # once per host instead of every poll. Cleared on recovery.
+        self._sidecar_warned: set = set()
 
     def _build_client_sync(self):
         if self._server_type == "PBS":
@@ -352,57 +355,59 @@ class ProxmoxClient:
             return host.split(":", 1)[0]
         return host
 
-    async def get_lm_sensors_http(self, hass, node: str):
-        url = f"http://{self._sidecar_host()}:9000/sensors"
+    def _sidecar_warn_once(self, endpoint: str, err: Exception) -> None:
+        """Log a down/failing sidecar endpoint once per host until it recovers."""
+        if endpoint in self._sidecar_warned:
+            return
+        self._sidecar_warned.add(endpoint)
+
+        host = self._sidecar_host()
+        if isinstance(err, requests.exceptions.ConnectionError):
+            LOGGER.warning(
+                "Proxmox sidecar not reachable at %s:9000 — %s data stays empty "
+                "until the sidecar service runs (%s). Further errors for this "
+                "endpoint are suppressed until it recovers.",
+                host,
+                endpoint,
+                err,
+            )
+        else:
+            LOGGER.warning(
+                "Proxmox sidecar request to %s:9000/%s failed: %s. Further errors "
+                "for this endpoint are suppressed until it recovers.",
+                host,
+                endpoint,
+                err,
+            )
+
+    async def _sidecar_get(self, hass, endpoint: str, timeout: int):
+        """GET a sidecar (:9000) endpoint, returning {} and logging once on failure."""
+        url = f"http://{self._sidecar_host()}:9000/{endpoint}"
 
         def _fetch():
             try:
-                r = requests.get(url, timeout=5)
+                r = requests.get(url, timeout=timeout)
                 r.raise_for_status()
-                return r.json()
-            except Exception:
+                data = r.json()
+                self._sidecar_warned.discard(endpoint)  # recovered
+                return data
+            except Exception as err:
+                self._sidecar_warn_once(endpoint, err)
                 return {}
 
         return await hass.async_add_executor_job(_fetch)
+
+    async def get_lm_sensors_http(self, hass, node: str):
+        return await self._sidecar_get(hass, "sensors", 5)
 
     async def get_smart_data_http(self, hass, node: str):
-        url = f"http://{self._sidecar_host()}:9000/smart"
-
-        def _fetch():
-            try:
-                r = requests.get(url, timeout=15)
-                r.raise_for_status()
-                return r.json()
-            except Exception:
-                return {}
-
-        return await hass.async_add_executor_job(_fetch)
+        return await self._sidecar_get(hass, "smart", 15)
 
     async def get_memory_http(self, hass, node: str):
-        url = f"http://{self._sidecar_host()}:9000/memory"
-
-        def _fetch():
-            try:
-                r = requests.get(url, timeout=15)
-                r.raise_for_status()
-                return r.json()
-            except Exception:
-                return {}
-
-        return await hass.async_add_executor_job(_fetch)
+        return await self._sidecar_get(hass, "memory", 15)
 
     async def get_mounts(self, hass, node):
-        return await hass.async_add_executor_job(self._get_mounts_sync)
-
-    def _get_mounts_sync(self):
-        url = f"http://{self._sidecar_host()}:9000/mounts"
-
-        try:
-            r = requests.get(url, timeout=15)
-            r.raise_for_status()
-            return r.json()
-        except Exception:
-            return {}
+        return await self._sidecar_get(hass, "mounts", 15)
 
     async def get_zfs_pools(self, hass, node):
         return await self.get(hass, f"nodes/{node}/disks/zfs") or []

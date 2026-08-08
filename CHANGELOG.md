@@ -4,6 +4,20 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [4.2.2] - 2026-08-08
+
+### Fixed
+
+- **Sidecar-Aufrufe (`:9000`) schluckten Fehler wortlos** (`api.py`) — Die vier
+  Sidecar-Endpunkte (`sensors`, `smart`, `memory`, `mounts`) fingen jeden Fehler
+  mit `except Exception: return {}` ab. Lief der Sidecar-Dienst nicht, entstanden
+  ohne jede Meldung keine Entitäten. Alle vier nutzen jetzt einen gemeinsamen
+  Helfer `_sidecar_get()`, der bei Fehlern **einmal pro Host/Endpunkt** eine
+  `LOGGER.warning` ausgibt — unterschieden nach „nicht erreichbar"
+  (`ConnectionError`, Dienst läuft nicht) und „Anfrage fehlgeschlagen" (HTTP/
+  Timeout). Bei Erfolg wird der Warn-Status zurückgesetzt, sodass eine
+  Wiederherstellung bzw. ein erneuter Ausfall wieder sichtbar wird.
+
 ## [4.2.1] - 2026-08-05
 
 ### Fixed

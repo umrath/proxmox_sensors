@@ -219,6 +219,16 @@ _req.get = MagicMock()
 _req.post = MagicMock()
 _req.exceptions = ModuleType("requests.exceptions")
 _req.exceptions.RequestException = Exception
+# Mirror the real requests hierarchy closely enough for isinstance checks in
+# api.py (get() connection-error handling, sidecar warn-once classification).
+_req.exceptions.ConnectionError = type("ConnectionError", (Exception,), {})
+_req.exceptions.Timeout = type("Timeout", (Exception,), {})
+_req.exceptions.ConnectTimeout = type(
+    "ConnectTimeout",
+    (_req.exceptions.ConnectionError, _req.exceptions.Timeout),
+    {},
+)
+_req.exceptions.HTTPError = type("HTTPError", (Exception,), {})
 sys.modules["requests"] = _req
 sys.modules["requests.exceptions"] = _req.exceptions
 
