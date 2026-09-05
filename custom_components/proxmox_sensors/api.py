@@ -20,6 +20,10 @@ REQUEST_TIMEOUT = 15
 # request never races the expiry.
 TICKET_LIFETIME = 100 * 60
 
+# How long a failed login is remembered. Shorter than the 60 s poll interval, so
+# each cycle still makes exactly one fresh attempt instead of one per call.
+AUTH_RETRY_COOLDOWN = 30
+
 
 class AuthenticationError(Exception):
     """Raised when the API rejects the supplied credentials."""
@@ -67,6 +71,11 @@ class ProxmoxClient:
         self._csrf_token: Optional[str] = None
         self._ticket_expires: float = 0.0
         self._auth_lock = asyncio.Lock()
+        # Short-lived memory of a failed login, so a burst of parallel calls does
+        # not turn into a burst of login attempts.
+        self._auth_retry_after: float = 0.0
+        self._auth_error_type = CannotConnect
+        self._auth_error_message = "PVE login failed"
         # Sidecar endpoints already warned about, so a down service is logged
         # once per host instead of every poll. Cleared on recovery.
         self._sidecar_warned: set = set()
@@ -129,40 +138,62 @@ class ProxmoxClient:
         """HA's shared aiohttp session (no blocking SSL-context build here)."""
         return async_get_clientsession(hass, verify_ssl=self._verify_ssl)
 
-    async def _ensure_ticket(self, session) -> str:
-        """Fetch or refresh a PVE auth ticket, returning the ticket to use.
+    async def _ensure_ticket(self, session):
+        """Fetch or refresh a PVE auth ticket, returning ``(ticket, csrf_token)``.
 
-        The caller uses the returned value rather than re-reading ``self._ticket``,
-        so a concurrent 401 clearing the cached ticket cannot turn this call's
-        cookie into ``None``.
+        The caller uses the returned pair rather than re-reading ``self._ticket`` /
+        ``self._csrf_token``, so a concurrent refresh or a 401 clearing the cache
+        can neither blank this call's cookie nor pair a new ticket with a stale
+        CSRF token.
         """
         async with self._auth_lock:
-            if self._ticket and time.monotonic() < self._ticket_expires:
-                return self._ticket
+            now = time.monotonic()
+            if self._ticket and now < self._ticket_expires:
+                return self._ticket, self._csrf_token
 
-            url = f"{self._api_base()}/access/ticket"
-            async with session.post(
-                url,
-                data={"username": self._user, "password": self._password},
-                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
-            ) as response:
-                if response.status in (401, 403):
-                    _raise_for_auth_or_permission(response.status, "access/ticket")
-                if response.status >= 400:
-                    raise CannotConnect(
-                        f"PVE ticket request failed with HTTP {response.status}"
-                    )
-                payload = await response.json(content_type=None)
+            # A failed login is remembered briefly. Without this, every call of a
+            # polling cycle queues on this lock and retries the login in turn, so
+            # one unreachable node produces a burst of serialized login attempts
+            # instead of a single one.
+            if now < self._auth_retry_after:
+                raise self._auth_error_type(self._auth_error_message)
 
-            data = (payload or {}).get("data") or {}
-            ticket = data.get("ticket")
-            if not ticket:
-                raise AuthenticationError("PVE did not return an auth ticket")
+            try:
+                url = f"{self._api_base()}/access/ticket"
+                async with session.post(
+                    url,
+                    data={"username": self._user, "password": self._password},
+                    timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+                ) as response:
+                    if response.status in (401, 403):
+                        _raise_for_auth_or_permission(response.status, "access/ticket")
+                    if response.status >= 400:
+                        raise CannotConnect(
+                            f"PVE ticket request failed with HTTP {response.status}"
+                        )
+                    payload = await response.json(content_type=None)
+
+                data = (payload or {}).get("data") or {}
+                ticket = data.get("ticket")
+                if not ticket:
+                    raise AuthenticationError("PVE did not return an auth ticket")
+            except Exception as err:
+                self._auth_retry_after = time.monotonic() + AUTH_RETRY_COOLDOWN
+                if isinstance(
+                    err, (AuthenticationError, PermissionError, CannotConnect)
+                ):
+                    self._auth_error_type = type(err)
+                    self._auth_error_message = str(err)
+                else:
+                    self._auth_error_type = CannotConnect
+                    self._auth_error_message = f"PVE ticket request failed: {err}"
+                raise
 
             self._ticket = ticket
             self._csrf_token = data.get("CSRFPreventionToken")
             self._ticket_expires = time.monotonic() + TICKET_LIFETIME
-            return ticket
+            self._auth_retry_after = 0.0
+            return ticket, self._csrf_token
 
     async def _api_request(
         self,
@@ -195,9 +226,10 @@ class ProxmoxClient:
                     raise AuthenticationError("PBS token authentication is incomplete")
                 return None
             else:
-                cookies = {"PVEAuthCookie": await self._ensure_ticket(session)}
-                if method != "GET" and self._csrf_token:
-                    headers["CSRFPreventionToken"] = self._csrf_token
+                ticket, csrf_token = await self._ensure_ticket(session)
+                cookies = {"PVEAuthCookie": ticket}
+                if method != "GET" and csrf_token:
+                    headers["CSRFPreventionToken"] = csrf_token
 
             payload_kwargs = {}
             if method != "GET" and data:

@@ -173,3 +173,88 @@ class TestUpdateFailedOnlyOnTotalFailure:
         ):
             with pytest.raises(UpdateFailed):
                 await coordinator.update_method()
+
+
+# ===========================================================================
+# Cluster coordinator — bekam die 4.2.1-Behandlung erst in 5.0.0
+# ===========================================================================
+
+class TestClusterCoordinatorKeepsPreviousData:
+    """Der Cluster-Coordinator warf bis 5.0.0 bedingungslos UpdateFailed.
+
+    Erreicht wird der Pfad nur, wenn der Fehler NICHT von
+    `gather(return_exceptions=True)` eingefangen wird — also beim äußeren
+    Timeout oder einem Fehler in der Ergebnisverarbeitung.
+    """
+
+    @staticmethod
+    def _client_failing_outside_gather():
+        client = MagicMock()
+        for name in (
+            "get_cluster_status",
+            "get_cluster_ha_status",
+            "get_cluster_firewall_options",
+            "get_backup_jobs",
+            "get_cluster_tasks",
+        ):
+            setattr(client, name, AsyncMock(return_value={}))
+        # Sync raise: happens while building the gather arguments, inside the try.
+        client.get_cluster_resources = MagicMock(side_effect=RuntimeError("boom"))
+        return client
+
+    @staticmethod
+    def _cluster_entry():
+        entry = MagicMock()
+        entry.data = {"cluster_name": "c1"}
+        return entry
+
+    @pytest.mark.asyncio
+    async def test_keeps_previous_data_instead_of_flapping(self):
+        import custom_components.proxmox_sensors.coordinator as coord_mod
+
+        coordinator = await coord_mod.create_cluster_coordinator(
+            MagicMock(), self._cluster_entry(), self._client_failing_outside_gather()
+        )
+        previous = {"server_type": "CLUSTER", "cluster_status": {"quorate": 1}}
+        coordinator.data = previous
+
+        assert await coordinator.update_method() is previous
+
+    @pytest.mark.asyncio
+    async def test_raises_updatefailed_without_previous_data(self):
+        import custom_components.proxmox_sensors.coordinator as coord_mod
+        from homeassistant.helpers.update_coordinator import UpdateFailed
+
+        coordinator = await coord_mod.create_cluster_coordinator(
+            MagicMock(), self._cluster_entry(), self._client_failing_outside_gather()
+        )
+        coordinator.data = None
+
+        with pytest.raises(UpdateFailed):
+            await coordinator.update_method()
+
+    @pytest.mark.asyncio
+    async def test_per_call_failures_degrade_without_touching_the_fallback(self):
+        """Einzelne fehlschlagende Calls fängt gather() ab — der Zyklus liefert
+        ein normales Ergebnis mit leeren Werten, kein UpdateFailed."""
+        import custom_components.proxmox_sensors.coordinator as coord_mod
+
+        client = MagicMock()
+        for name in (
+            "get_cluster_resources",
+            "get_cluster_status",
+            "get_cluster_ha_status",
+            "get_cluster_firewall_options",
+            "get_backup_jobs",
+            "get_cluster_tasks",
+        ):
+            setattr(client, name, AsyncMock(side_effect=RuntimeError("down")))
+
+        coordinator = await coord_mod.create_cluster_coordinator(
+            MagicMock(), self._cluster_entry(), client
+        )
+        coordinator.data = None
+        result = await coordinator.update_method()
+
+        assert result["cluster_resources"] == []
+        assert result["cluster_status"] == {}

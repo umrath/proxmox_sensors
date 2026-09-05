@@ -240,6 +240,88 @@ class TestAuth:
         assert await client.get(MagicMock(), "nodes") is None
 
     @pytest.mark.asyncio
+    async def test_failed_login_is_not_retried_once_per_call(self):
+        """Regression: the auth lock only collapsed *successful* logins. On an
+        unreachable node every call of a cycle queued on the lock and retried the
+        login — 14 serialized attempts for one node."""
+        client = make_client(token_id=None, token_secret=None, password="pw")
+        logins = {"n": 0}
+
+        def handler(method, url, kwargs):
+            if "access/ticket" in url:
+                logins["n"] += 1
+            return connect_error()
+
+        attach(client, handler)
+        await asyncio.gather(
+            *(client.get(MagicMock(), f"nodes/{i}") for i in range(14))
+        )
+        assert logins["n"] == 1, f"{logins['n']} login attempts for one cycle"
+
+    @pytest.mark.asyncio
+    async def test_login_is_retried_after_the_cooldown(self):
+        client = make_client(token_id=None, token_secret=None, password="pw")
+        logins = {"n": 0}
+
+        def handler(method, url, kwargs):
+            if "access/ticket" in url:
+                logins["n"] += 1
+            return connect_error()
+
+        attach(client, handler)
+        await client.get(MagicMock(), "nodes")
+        client._auth_retry_after = 0.0  # cooldown elapsed
+        await client.get(MagicMock(), "nodes")
+        assert logins["n"] == 2
+
+    @pytest.mark.asyncio
+    async def test_successful_login_clears_the_cooldown(self):
+        client = make_client(token_id=None, token_secret=None, password="pw")
+        state = {"down": True}
+
+        def handler(method, url, kwargs):
+            if "access/ticket" in url:
+                if state["down"]:
+                    return connect_error()
+                return FakeResponse(
+                    payload={"data": {"ticket": "t", "CSRFPreventionToken": "c"}}
+                )
+            return FakeResponse(payload={"data": []})
+
+        attach(client, handler)
+        await client.get(MagicMock(), "nodes")          # fails, arms cooldown
+        state["down"] = False
+        client._auth_retry_after = 0.0
+        assert await client.get(MagicMock(), "nodes") == []
+        assert client._auth_retry_after == 0.0, "cooldown must be cleared on success"
+
+    @pytest.mark.asyncio
+    async def test_csrf_token_is_paired_with_its_own_ticket(self):
+        """A concurrent refresh must not pair a fresh ticket with a stale CSRF."""
+        client = make_client(token_id=None, token_secret=None, password="pw")
+        issued = {"n": 0}
+
+        def handler(method, url, kwargs):
+            if "access/ticket" in url:
+                issued["n"] += 1
+                return FakeResponse(
+                    payload={
+                        "data": {
+                            "ticket": f"tkt-{issued['n']}",
+                            "CSRFPreventionToken": f"csrf-{issued['n']}",
+                        }
+                    }
+                )
+            return FakeResponse(payload={"data": "ok"})
+
+        session = attach(client, handler)
+        await client.post(MagicMock(), "nodes/n1/status", {"command": "reboot"})
+
+        write = [c for c in session.calls if "status" in c["url"]][0]
+        n = write["cookies"]["PVEAuthCookie"].split("-")[1]
+        assert write["headers"]["CSRFPreventionToken"] == f"csrf-{n}"
+
+    @pytest.mark.asyncio
     async def test_concurrent_401_cannot_produce_a_none_cookie(self):
         """A parallel 401 clears the cached ticket; the in-flight call must still
         send the ticket it obtained, never `PVEAuthCookie: None`."""

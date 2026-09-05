@@ -4,6 +4,37 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [5.0.1] - 2026-09-05
+
+Befunde aus dem Review des 5.0.0-Umbaus. Betrifft ausschließlich die
+Authentifizierung per Benutzer/Passwort; Setups mit API-Token sind nicht
+betroffen.
+
+### Fixed
+
+- **Fehlgeschlagener Login wurde pro Aufruf wiederholt statt einmal pro Zyklus**
+  (`api.py`) — Der Auth-Lock bündelte nur *erfolgreiche* Logins. War der Node
+  nicht erreichbar, stellte sich jeder Aufruf eines Poll-Zyklus am Lock an und
+  versuchte den Login erneut: gemessen **14 serialisierte Loginversuche** für
+  einen einzigen Node, jeder bis zu `REQUEST_TIMEOUT` lang. Ein fehlgeschlagener
+  Login wird jetzt kurz gemerkt (`AUTH_RETRY_COOLDOWN`, 30 s — kürzer als das
+  Poll-Intervall), sodass pro Zyklus genau ein Versuch stattfindet. Damit gilt
+  die in den 5.0.0-Release-Notes behauptete Eigenschaft „ein Login statt einer
+  pro Anfrage" nun auch im Fehlerfall; in 5.0.0 stimmte sie nur bei Erfolg.
+
+- **Ticket und CSRF-Token konnten aus verschiedenen Logins stammen**
+  (`api.py`) — `_ensure_ticket()` lieferte nur das Ticket zurück, das
+  CSRF-Token wurde anschließend erneut aus dem Objektzustand gelesen. Erneuerte
+  ein paralleler Aufruf dazwischen die Sitzung, konnte ein frisches Ticket mit
+  einem veralteten CSRF-Token kombiniert werden — PVE hätte den schreibenden
+  Aufruf abgelehnt. Beide Werte werden jetzt als Paar zurückgegeben und
+  gemeinsam verwendet.
+
+### Added
+
+- Tests für den Cluster-Coordinator-Rückfall auf Vorwerte (in 5.0.0 geändert,
+  aber ungetestet) sowie für beide oben genannten Fehler. Suite: 311 Tests.
+
 ## [5.0.0] - 2026-09-05
 
 ### Changed (Architektur)
