@@ -12,10 +12,10 @@ _LOGGER = logging.getLogger(__name__)
 
 _GUEST_FIELDS = ("cpu", "mem", "maxmem", "disk", "maxdisk", "uptime", "netin", "netout")
 
-# Per-task wall-clock cap so one hanging API call fails alone instead of
-# stalling the whole fan-out. Kept above the sidecar HTTP timeouts (5/15 s in
-# api.py) so a slow-but-valid SMART/memory read is not cut short; it is a
-# backstop — PVE calls fail earlier via the proxmoxer request timeout.
+# Per-task wall-clock cap so one slow call fails alone instead of stalling the
+# whole fan-out. The transport already bounds each individual HTTP request
+# (REQUEST_TIMEOUT / the sidecar timeouts in api.py); this is the backstop for a
+# task that issues several requests in sequence.
 _TASK_TIMEOUT = 20
 
 # Pure safety net around the whole update. With every task individually bounded
@@ -872,6 +872,15 @@ async def create_cluster_coordinator(hass, entry, client):
                 )
 
         except Exception as err:
+            # Same rule as the node coordinator: a whole-cycle failure must not
+            # flap every cluster entity to `unavailable` when the previous
+            # cycle's data is still there.
+            previous = getattr(coordinator, "data", None)
+            if previous:
+                _LOGGER.warning(
+                    "Cluster update failed, keeping previous data: %s", err
+                )
+                return previous
             raise UpdateFailed(f"Cluster update error: {err}")
 
         result["last_update"] = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")

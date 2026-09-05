@@ -1,0 +1,9 @@
+# Test dependencies.
+#
+# Home Assistant itself is stubbed in tests/conftest.py, but aiohttp is real:
+# since 5.0.0 the API transport is aiohttp-only, and the transport tests run
+# against a genuine aiohttp server so the client's aiohttp usage is verified
+# rather than mocked.
+aiohttp>=3.9.0
+pytest>=8.0
+pytest-asyncio>=0.23

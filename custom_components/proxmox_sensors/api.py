@@ -1,12 +1,24 @@
 """API for Proxmox Extended Sensors."""
 
 from typing import Any, Optional
+import asyncio
 import logging
-import requests
-import urllib3
-from proxmoxer import ProxmoxAPI
+import time
+
+import aiohttp
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 LOGGER = logging.getLogger(__name__)
+
+# Hard wall-clock cap for a single API call. Unlike a socket timeout this also
+# bounds the TLS handshake and a response that trickles in byte by byte, so a
+# struggling node can never hold a call open indefinitely. Because the transport
+# is fully async there is no executor thread left behind when it fires.
+REQUEST_TIMEOUT = 15
+
+# PVE auth tickets are valid for two hours; refresh well before that so a
+# request never races the expiry.
+TICKET_LIFETIME = 100 * 60
 
 
 class AuthenticationError(Exception):
@@ -29,23 +41,6 @@ def _raise_for_auth_or_permission(status_code: int | None, path: str) -> None:
         raise PermissionError(f"Permission denied for {path}")
 
 
-def _extract_status_code(err: Exception) -> int | None:
-    response = getattr(err, "response", None)
-    if response is not None and getattr(response, "status_code", None):
-        return response.status_code
-
-    status_code = getattr(err, "status_code", None) or getattr(err, "status", None)
-    if status_code:
-        return int(status_code)
-
-    message = str(err)
-    for code in (401, 403):
-        if str(code) in message:
-            return code
-
-    return None
-
-
 class ProxmoxClient:
     def __init__(
         self,
@@ -66,119 +61,249 @@ class ProxmoxClient:
         self._server_type = server_type
         self._port = port
         self._verify_ssl = verify_ssl
-        self._proxmox: Optional[ProxmoxAPI] = None
+        # PVE password auth: ticket + CSRF token, refreshed under a lock so a
+        # burst of parallel calls triggers exactly one login.
+        self._ticket: Optional[str] = None
+        self._csrf_token: Optional[str] = None
+        self._ticket_expires: float = 0.0
+        self._auth_lock = asyncio.Lock()
         # Sidecar endpoints already warned about, so a down service is logged
         # once per host instead of every poll. Cleared on recovery.
         self._sidecar_warned: set = set()
 
-    def _build_client_sync(self):
+    # ================= TRANSPORT =================
+
+    def _split_host_port(self):
+        """Split the configured host into ``(host, embedded_port|None)``.
+
+        ``self._host`` may carry a scheme and/or the API port (e.g.
+        ``https://pve.local:8006``), while the port also lives in ``self._port``.
+        Bracketed IPv6 literals keep their brackets, and a bare IPv6 literal gets
+        bracketed, so the result can be spliced into a URL as-is.
+        """
+        host = (self._host or "").strip()
+        for scheme in ("https://", "http://"):
+            if host.startswith(scheme):
+                host = host[len(scheme) :]
+        host = host.split("/")[0]
+
+        port = None
+        if host.startswith("["):
+            end = host.find("]")
+            if end != -1:
+                rest = host[end + 1 :]
+                if rest.startswith(":") and rest[1:].isdigit():
+                    port = int(rest[1:])
+                host = host[: end + 1]
+        elif host.count(":") == 1:
+            name, _, maybe_port = host.partition(":")
+            if maybe_port.isdigit():
+                host, port = name, int(maybe_port)
+        elif host.count(":") > 1:
+            host = f"[{host}]"  # bare IPv6 literal
+
+        return host, port
+
+    def _api_base(self) -> str:
+        host, embedded_port = self._split_host_port()
+        default_port = 8007 if self._server_type == "PBS" else 8006
+        port = self._port or embedded_port or default_port
+        return f"https://{host}:{port}/api2/json"
+
+    def _token_header(self) -> Optional[str]:
+        """Authorization header for API-token auth, or None if not configured."""
+        if not (self._token_id and self._token_secret):
+            return None
+
+        token_full = (
+            self._token_id
+            if "!" in self._token_id
+            else f"{self._user}!{self._token_id}"
+        )
+
         if self._server_type == "PBS":
-            return
+            return f"PBSAPIToken {token_full}:{self._token_secret}"
+        return f"PVEAPIToken={token_full}={self._token_secret}"
 
-        # The InsecureRequestWarning is emitted from inside proxmoxer's requests
-        # calls (run in executor threads). warnings filters are process-global and
-        # catch_warnings() is not thread-safe, so this cannot be scoped per-client.
-        # We suppress it globally but only when the user has explicitly opted into
-        # an unverified TLS connection.
-        if not self._verify_ssl:
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    def _session(self, hass):
+        """HA's shared aiohttp session (no blocking SSL-context build here)."""
+        return async_get_clientsession(hass, verify_ssl=self._verify_ssl)
 
-        port = self._port or 8006
-        # Bound each PVE request so a stuck endpoint (e.g. pvestatd blocked on an
-        # unreachable storage) fails fast and releases its executor thread,
-        # instead of hanging near the coordinator's whole-update budget.
-        timeout_val = 15
+    async def _ensure_ticket(self, session) -> str:
+        """Fetch or refresh a PVE auth ticket, returning the ticket to use.
+
+        The caller uses the returned value rather than re-reading ``self._ticket``,
+        so a concurrent 401 clearing the cached ticket cannot turn this call's
+        cookie into ``None``.
+        """
+        async with self._auth_lock:
+            if self._ticket and time.monotonic() < self._ticket_expires:
+                return self._ticket
+
+            url = f"{self._api_base()}/access/ticket"
+            async with session.post(
+                url,
+                data={"username": self._user, "password": self._password},
+                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+            ) as response:
+                if response.status in (401, 403):
+                    _raise_for_auth_or_permission(response.status, "access/ticket")
+                if response.status >= 400:
+                    raise CannotConnect(
+                        f"PVE ticket request failed with HTTP {response.status}"
+                    )
+                payload = await response.json(content_type=None)
+
+            data = (payload or {}).get("data") or {}
+            ticket = data.get("ticket")
+            if not ticket:
+                raise AuthenticationError("PVE did not return an auth ticket")
+
+            self._ticket = ticket
+            self._csrf_token = data.get("CSRFPreventionToken")
+            self._ticket_expires = time.monotonic() + TICKET_LIFETIME
+            return ticket
+
+    async def _api_request(
+        self,
+        hass,
+        method: str,
+        path: str,
+        data=None,
+        raise_errors: bool = False,
+    ) -> Any:
+        """Perform one Proxmox API call and return the unwrapped ``data`` payload.
+
+        The whole call is bounded by ``ClientTimeout(total=...)``, which covers
+        connect, TLS and a trickling response alike — and, being async, leaves no
+        executor thread behind when it fires.
+        """
+        session = self._session(hass)
+        url = f"{self._api_base()}/{path}"
+        headers = {"Accept": "application/json"}
+        cookies = None
 
         try:
-            if self._token_id and self._token_secret:
-                self._proxmox = ProxmoxAPI(
-                    self._host,
-                    user=self._user,
-                    token_name=self._token_id,
-                    token_value=self._token_secret,
-                    verify_ssl=self._verify_ssl,
-                    port=port,
-                    timeout=timeout_val,
+            auth_header = self._token_header()
+            if auth_header:
+                headers["Authorization"] = auth_header
+            elif self._server_type == "PBS":
+                LOGGER.error(
+                    "PBS token authentication requires user, token_id and token_secret"
                 )
+                if raise_errors:
+                    raise AuthenticationError("PBS token authentication is incomplete")
+                return None
             else:
-                self._proxmox = ProxmoxAPI(
-                    self._host,
-                    user=self._user,
-                    password=self._password,
-                    verify_ssl=self._verify_ssl,
-                    port=port,
-                    timeout=timeout_val,
-                )
-        except Exception as err:
-            LOGGER.error(
-                "Failed to initialize Proxmoxer client on %s: %s", self._host, err
-            )
-            self._proxmox = None
+                cookies = {"PVEAuthCookie": await self._ensure_ticket(session)}
+                if method != "GET" and self._csrf_token:
+                    headers["CSRFPreventionToken"] = self._csrf_token
 
-    async def get_api_client(self, hass):
-        if self._server_type == "PBS":
-            return None
+            payload_kwargs = {}
+            if method != "GET" and data:
+                # PVE expects form encoding; PBS expects JSON.
+                key = "json" if self._server_type == "PBS" else "data"
+                payload_kwargs[key] = data
 
-        if self._proxmox is None:
-            await hass.async_add_executor_job(self._build_client_sync)
+            async with session.request(
+                method,
+                url,
+                headers=headers,
+                cookies=cookies,
+                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+                **payload_kwargs,
+            ) as response:
+                status = response.status
 
-        return self._proxmox
-
-    async def get(self, hass, path: str, raise_errors: bool = False) -> Any:
-        if self._server_type == "PBS":
-            return await hass.async_add_executor_job(
-                self._pbs_request, "GET", path, None, raise_errors
-            )
-
-        proxmox = await self.get_api_client(hass)
-        if proxmox is None:
-            if raise_errors:
-                raise CannotConnect(f"Unable to initialize client for {path}")
-            return None
-
-        try:
-            return await hass.async_add_executor_job(proxmox.get, path)
-        except Exception as err:
-            if raise_errors:
-                status_code = _extract_status_code(err)
-                if status_code is not None:
-                    _raise_for_auth_or_permission(status_code, path)
+                if raise_errors and status >= 400:
+                    _raise_for_auth_or_permission(status, path)
                     LOGGER.debug(
-                        "PVE HTTP %s on validation endpoint %s", status_code, path
+                        "%s HTTP %s on validation endpoint %s",
+                        self._server_type,
+                        status,
+                        path,
                     )
                     return None
-                if isinstance(err, requests.exceptions.RequestException):
-                    raise CannotConnect(f"PVE request failed for {path}") from err
+
+                if status == 401:
+                    # Most likely an expired ticket — force a fresh login next call.
+                    self._ticket = None
+                    LOGGER.error("%s HTTP 401 on %s", self._server_type, path)
+                    return None
+
+                if status == 403:
+                    return None
+
+                if status >= 400:
+                    LOGGER.error(
+                        "%s HTTP %s on %s: %s",
+                        self._server_type,
+                        status,
+                        path,
+                        await response.text(),
+                    )
+                    return None
+
+                payload = await response.json(content_type=None)
+
+        except (AuthenticationError, PermissionError, CannotConnect) as err:
+            # These are the config-flow's validation signals. During normal
+            # polling the contract is "return None, never raise" — a login that
+            # fails on a network blip must degrade like any other failed call
+            # instead of taking the whole update cycle down.
+            if raise_errors:
                 raise
-
-            # Connection failures are expected when a node is powered off.
-            if isinstance(
-                err,
-                (
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.ConnectTimeout,
-                    requests.exceptions.Timeout,
-                ),
-            ):
-                LOGGER.debug("PVE node unreachable while requesting %s: %s", path, err)
-                return None
-
-            LOGGER.error("PVE GET error on %s: %s", path, err)
+            LOGGER.debug(
+                "%s auth/connection failure on %s: %s", self._server_type, path, err
+            )
             return None
+        except (aiohttp.ClientConnectorError, asyncio.TimeoutError) as err:
+            # Expected while a node is powered off, unreachable or wedged.
+            if raise_errors:
+                raise CannotConnect(
+                    f"{self._server_type} request failed for {path}"
+                ) from err
+            LOGGER.debug(
+                "%s node unreachable while requesting %s: %s",
+                self._server_type,
+                path,
+                err,
+            )
+            return None
+        except aiohttp.ClientError as err:
+            if raise_errors:
+                raise CannotConnect(
+                    f"{self._server_type} request failed for {path}"
+                ) from err
+            LOGGER.error(
+                "%s %s error on %s: %s", self._server_type, method, path, err
+            )
+            return None
+        except Exception as err:
+            if raise_errors:
+                LOGGER.debug(
+                    "%s validation endpoint %s failed with %s: %s",
+                    self._server_type,
+                    path,
+                    type(err).__name__,
+                    err,
+                )
+                raise
+            LOGGER.error(
+                "%s %s error on %s: %s", self._server_type, method, path, err
+            )
+            return None
+
+        # Match proxmoxer's behaviour of handing back the `data` envelope content.
+        if isinstance(payload, dict) and "data" in payload:
+            return payload["data"]
+        return payload
+
+    async def get(self, hass, path: str, raise_errors: bool = False) -> Any:
+        return await self._api_request(hass, "GET", path, raise_errors=raise_errors)
 
     async def post(self, hass, path: str, data=None) -> Any:
-        proxmox = await self.get_api_client(hass)
-        if proxmox is None:
-            return None
-
-        def _do_post():
-            return proxmox.post(path, **(data or {}))
-
-        try:
-            return await hass.async_add_executor_job(_do_post)
-        except Exception as err:
-            LOGGER.error("PVE POST error on %s: %s", path, err)
-            return None
+        return await self._api_request(hass, "POST", path, data=data or {})
 
     async def get_cluster_resources(self, hass):
         return await self.get(hass, "cluster/resources") or []
@@ -346,14 +471,7 @@ class ProxmoxClient:
         port lives in ``self._port``, so any colon in the host is an embedded port
         and must be stripped first.
         """
-        host = self._host
-        # Bracketed IPv6 literal, with or without a trailing port: [::1] / [::1]:8006
-        if host.startswith("["):
-            return host[: host.index("]") + 1] if "]" in host else host
-        # hostname / IPv4 with a single optional :port suffix
-        if host.count(":") == 1:
-            return host.split(":", 1)[0]
-        return host
+        return self._split_host_port()[0]
 
     def _sidecar_warn_once(self, endpoint: str, err: Exception) -> None:
         """Log a down/failing sidecar endpoint once per host until it recovers."""
@@ -362,7 +480,7 @@ class ProxmoxClient:
         self._sidecar_warned.add(endpoint)
 
         host = self._sidecar_host()
-        if isinstance(err, requests.exceptions.ConnectionError):
+        if isinstance(err, aiohttp.ClientConnectorError):
             LOGGER.warning(
                 "Proxmox sidecar not reachable at %s:9000 — %s data stays empty "
                 "until the sidecar service runs (%s). Further errors for this "
@@ -384,18 +502,17 @@ class ProxmoxClient:
         """GET a sidecar (:9000) endpoint, returning {} and logging once on failure."""
         url = f"http://{self._sidecar_host()}:9000/{endpoint}"
 
-        def _fetch():
-            try:
-                r = requests.get(url, timeout=timeout)
-                r.raise_for_status()
-                data = r.json()
-                self._sidecar_warned.discard(endpoint)  # recovered
-                return data
-            except Exception as err:
-                self._sidecar_warn_once(endpoint, err)
-                return {}
-
-        return await hass.async_add_executor_job(_fetch)
+        try:
+            async with self._session(hass).get(
+                url, timeout=aiohttp.ClientTimeout(total=timeout)
+            ) as response:
+                response.raise_for_status()
+                data = await response.json(content_type=None)
+            self._sidecar_warned.discard(endpoint)  # recovered
+            return data
+        except Exception as err:
+            self._sidecar_warn_once(endpoint, err)
+            return {}
 
     async def get_lm_sensors_http(self, hass, node: str):
         return await self._sidecar_get(hass, "sensors", 5)
@@ -472,96 +589,11 @@ class ProxmoxClient:
         """Return cluster firewall options."""
         return await self.get(hass, "cluster/firewall/options") or {}
 
-    def _pbs_request(
-        self, method: str, path: str, data=None, raise_errors: bool = False
-    ):
-        port = self._port or 8007
-
-        clean_host = (
-            self._host.replace("https://", "")
-            .replace("http://", "")
-            .split("/")[0]
-            .split(":")[0]
-        )
-        url = f"https://{clean_host}:{port}/api2/json/{path}"
-
-        if not self._user or not self._token_secret:
-            LOGGER.error("PBS token authentication requires user and token_secret")
-            if raise_errors:
-                raise AuthenticationError("PBS token authentication is incomplete")
-            return None
-
-        if self._token_id:
-            if "!" in self._token_id:
-                token_full = self._token_id
-            else:
-                token_full = f"{self._user}!{self._token_id}"
-        else:
-            LOGGER.error("PBS token_id is missing")
-            if raise_errors:
-                raise AuthenticationError("PBS token_id is missing")
-            return None
-
-        auth_header = f"PBSAPIToken {token_full}:{self._token_secret}"
-        headers = {"Authorization": auth_header, "Accept": "application/json"}
-
-        try:
-            if method == "GET":
-                r = requests.get(
-                    url, headers=headers, verify=self._verify_ssl, timeout=15
-                )
-            else:
-                r = requests.post(
-                    url,
-                    headers=headers,
-                    json=(data or {}),
-                    verify=self._verify_ssl,
-                    timeout=15,
-                )
-
-            if raise_errors and r.status_code >= 400:
-                _raise_for_auth_or_permission(r.status_code, path)
-                LOGGER.debug(
-                    "PBS HTTP %s on validation endpoint %s: %s",
-                    r.status_code,
-                    path,
-                    r.text,
-                )
-                return None
-
-            if r.status_code == 403:
-                return None
-
-            if r.status_code >= 400:
-                LOGGER.error("PBS HTTP %s on %s: %s", r.status_code, path, r.text)
-                return None
-
-            return r.json().get("data")
-
-        except (AuthenticationError, PermissionError, CannotConnect):
-            raise
-        except requests.exceptions.RequestException as err:
-            if raise_errors:
-                raise CannotConnect(f"PBS request failed for {path}") from err
-            return None
-        except Exception as err:
-            if raise_errors:
-                LOGGER.debug(
-                    "PBS validation endpoint %s failed with %s: %s",
-                    path,
-                    type(err).__name__,
-                    err,
-                )
-                raise
-            return None
-
     async def pbs_get(self, hass, path: str) -> Any:
-        return await hass.async_add_executor_job(self._pbs_request, "GET", path, None)
+        return await self._api_request(hass, "GET", path)
 
     async def pbs_post(self, hass, path: str, data=None) -> Any:
-        return await hass.async_add_executor_job(
-            self._pbs_request, "POST", path, data or {}
-        )
+        return await self._api_request(hass, "POST", path, data=data or {})
 
     async def get_pbs_datastores(self, hass):
         data = await self.pbs_get(hass, "admin/datastore")

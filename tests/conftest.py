@@ -209,36 +209,16 @@ _vol.Required = MagicMock
 _vol.Optional = MagicMock
 _vol.In = MagicMock
 
-# proxmoxer (used by api.py)
-_px = _make_module("proxmoxer")
-_px.ProxmoxAPI = MagicMock
+# homeassistant.helpers.aiohttp_client — api.py pulls the shared client session
+# from here. Tests patch ProxmoxClient._session, so this only has to be
+# importable and return something session-shaped.
+_ha_aiohttp = _make_module("homeassistant.helpers.aiohttp_client")
+_ha_aiohttp.async_get_clientsession = MagicMock()
+_ha_helpers.aiohttp_client = _ha_aiohttp
 
-# requests (used by api.py)
-_req = _make_module("requests")
-_req.get = MagicMock()
-_req.post = MagicMock()
-_req.exceptions = ModuleType("requests.exceptions")
-_req.exceptions.RequestException = Exception
-# Mirror the real requests hierarchy closely enough for isinstance checks in
-# api.py (get() connection-error handling, sidecar warn-once classification).
-_req.exceptions.ConnectionError = type("ConnectionError", (Exception,), {})
-_req.exceptions.Timeout = type("Timeout", (Exception,), {})
-_req.exceptions.ConnectTimeout = type(
-    "ConnectTimeout",
-    (_req.exceptions.ConnectionError, _req.exceptions.Timeout),
-    {},
-)
-_req.exceptions.HTTPError = type("HTTPError", (Exception,), {})
-sys.modules["requests"] = _req
-sys.modules["requests.exceptions"] = _req.exceptions
-
-# urllib3
-_urllib3 = _make_module("urllib3")
-_urllib3.disable_warnings = MagicMock()
-_urllib3.exceptions = ModuleType("urllib3.exceptions")
-_urllib3.exceptions.InsecureRequestWarning = Warning
-sys.modules["urllib3"] = _urllib3
-sys.modules["urllib3.exceptions"] = _urllib3.exceptions
+# NOTE: proxmoxer / requests / urllib3 stubs are gone — since 5.0.0 the
+# transport is aiohttp only, and aiohttp is a real test dependency so the
+# genuine exception classes are exercised.
 
 # dateutil (used by sensor/cluster.py)
 _dateutil = _make_module("dateutil")

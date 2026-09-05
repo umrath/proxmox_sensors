@@ -4,6 +4,64 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-09-05
+
+### Changed (Architektur)
+
+- **API-Transport vollständig auf `aiohttp` umgestellt; `proxmoxer` entfällt**
+  (`api.py`, `manifest.json`) — Bisher lief jeder Aufruf synchron über
+  `hass.async_add_executor_job` (proxmoxer bzw. `requests`). Jetzt gibt es einen
+  einzigen asynchronen `_api_request()`-Pfad für PVE, PBS und den Sidecar. Die
+  Authentifizierung ist nativ implementiert: API-Token per Header
+  (`PVEAPIToken=…`, PBS-Format unverändert) und Benutzer/Passwort per
+  `access/ticket` mit `PVEAuthCookie`, `CSRFPreventionToken` für schreibende
+  Aufrufe und Erneuerung unter einem Lock, sodass ein Schwall paralleler
+  Anfragen genau einen Login auslöst. Die Abhängigkeit `proxmoxer` wurde aus
+  `manifest.json` entfernt; `aiohttp` liefert Home Assistant ohnehin mit.
+
+### Fixed
+
+- **Ein schlecht erreichbarer PVE-Node ließ die gesamte HA-Instanz hängen**
+  (`api.py`) — Ursache war nicht die Integration allein, sondern der geteilte
+  Executor-Pool: `asyncio.timeout` bricht nur das `await` ab, **nicht** den
+  Executor-Thread. Jeder abgelaufene Aufruf hinterließ damit einen blockierten
+  Worker im HA-weiten `SyncWorker`-Pool (64 Threads, von *allen* Integrationen
+  geteilt). Da die `Semaphore(5)` nur Awaits begrenzt, griff nach jeder
+  Timeout-Welle die nächste Welle weitere Threads ab — ein hängender Node
+  konnte so bis zu 14 Threads pro Zyklus binden, bei mehreren Nodes lief der
+  Pool leer und jede andere Integration stand still. Der neue Transport nutzt
+  `aiohttp.ClientTimeout(total=…)`: ein hartes Gesamtlimit, das Connect,
+  TLS-Handshake und eine tröpfelnde Antwort gleichermaßen abdeckt — und da er
+  asynchron ist, bleibt beim Auslaufen kein Thread zurück. Ein lahmer Node
+  verlangsamt nur noch seinen eigenen Coordinator.
+
+- **Teilausfall ließ Cluster-Entitäten flappen** (`coordinator.py`) — Der
+  Cluster-Coordinator warf weiterhin bedingungslos `UpdateFailed` und hatte die
+  Behandlung aus 4.2.1 nie erhalten. Er behält jetzt ebenfalls die Vorwerte,
+  wenn bereits Daten vorliegen.
+
+- **Nebenbefund aus dem Umbau**: Ein fehlgeschlagener Login (falsches Passwort
+  oder Netz-Aussetzer) hätte beim normalen Polling eine Ausnahme bis in den
+  Coordinator durchgereicht. Der Vertrag „liefert `None`, wirft nie" gilt jetzt
+  auch für den Ticket-Pfad; Ausnahmen fliegen nur noch bei der Validierung im
+  Config-Flow (`raise_errors=True`).
+
+### Removed
+
+- `proxmoxer` als Abhängigkeit, sowie sämtliche `requests`-/`urllib3`-Nutzung.
+  Damit entfällt auch die geteilte, nicht thread-sichere `requests.Session`, die
+  bisher von bis zu fünf Threads gleichzeitig benutzt wurde.
+- `tests/test_api_urllib3_warnings.py` — testete das Eingrenzen der
+  `urllib3`-Warnungen; dieser Code existiert nicht mehr. Die TLS-Verifikation
+  läuft über `async_get_clientsession(verify_ssl=…)` und ist in
+  `tests/test_api_transport.py` abgedeckt.
+
+### Hinweis zur Migration
+
+- Keine Konfigurationsänderung nötig; bestehende Einträge (Token wie
+  Benutzer/Passwort) funktionieren unverändert. Da `proxmoxer` entfällt, kann
+  Home Assistant das Paket nach dem Update entfernen.
+
 ## [4.2.2] - 2026-08-08
 
 ### Fixed

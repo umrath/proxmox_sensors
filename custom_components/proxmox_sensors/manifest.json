@@ -11,8 +11,7 @@
   "issue_tracker": "https://github.com/umrath/proxmox_sensors/issues",
   "loggers": ["custom_components.proxmox_sensors"],
   "requirements": [
-    "aiohttp>=3.9.0",
-    "proxmoxer>=2.0.0"
+    "aiohttp>=3.9.0"
   ],
-  "version": "4.2.2"
+  "version": "5.0.0"
 }
