@@ -365,9 +365,9 @@ async def create_proxmox_coordinator(hass, entry, client):
     node = data.get(CONF_NODE, "Proxmox")
     server_type = data.get(CONF_PLATFORM_TYPE, "PVE")
 
-    selected_vms = data.get("selected_vms", [])
-    selected_cts = data.get("selected_cts", [])
-    selected_storage = data.get("selected_storage", [])
+    selected_vms = data.get("selected_vms", None)
+    selected_cts = data.get("selected_cts", None)
+    selected_storage = data.get("selected_storage", None)
 
     enable_physical_disks = data.get("enable_physical_disks", True)
     enable_lm_sensors = data.get("enable_lm_sensors", True)
@@ -408,7 +408,7 @@ async def create_proxmox_coordinator(hass, entry, client):
 
                     selected = data.get("selected_storage")
 
-                    if not selected:
+                    if selected is None:
                         actual_stores = await client.get_pbs_datastores(hass)
                     else:
                         actual_stores = selected
@@ -670,7 +670,10 @@ async def create_proxmox_coordinator(hass, entry, client):
                         for st in (storages if isinstance(storages, list) else [])
                         if isinstance(st, dict)
                         and "storage" in st
-                        and (not selected_storage or st["storage"] in selected_storage)
+                        and (
+                            selected_storage is None
+                            or st["storage"] in selected_storage
+                        )
                     }
 
                     # -------- ZFS --------

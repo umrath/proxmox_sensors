@@ -22,13 +22,19 @@ class TestMakeGuestKey:
 
 
 class TestMatchesSelectedGuest:
-    # ---- empty / None selection → matches everything ----
-
-    def test_empty_list_matches_all(self):
-        assert matches_selected_guest([], "node1", 101)
+    # ---- None = nothing stored → all; [] = deselected on purpose → none ----
 
     def test_none_matches_all(self):
+        """No selection stored (legacy entry) means show everything."""
         assert matches_selected_guest(None, "node1", 101)
+
+    def test_empty_list_matches_nothing(self):
+        """An explicitly emptied selection must hide every guest.
+
+        Before 5.0.3 `[]` was collapsed with `None`, so deselecting every VM in
+        the options flow had no effect at all.
+        """
+        assert not matches_selected_guest([], "node1", 101)
 
     # ---- raw vmid selection ----
 

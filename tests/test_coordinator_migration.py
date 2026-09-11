@@ -73,11 +73,17 @@ class TestBuildVmsDictLocalVMs:
         result = _build_vms_dict([vm_local(101)], [], ["999"], "node1")
         assert "node1:101" not in result
 
-    def test_empty_selection_includes_all_local_vms(self):
+    def test_no_selection_includes_all_local_vms(self):
+        """None = nothing stored (legacy entry) -> every VM is included."""
         vms = [vm_local(101), vm_local(202)]
-        result = _build_vms_dict(vms, [], [], "node1")
+        result = _build_vms_dict(vms, [], None, "node1")
         assert "node1:101" in result
         assert "node1:202" in result
+
+    def test_empty_selection_includes_no_local_vms(self):
+        """[] = deselected on purpose -> no VM is included (fixed in 5.0.3)."""
+        vms = [vm_local(101), vm_local(202)]
+        assert _build_vms_dict(vms, [], [], "node1") == {}
 
     def test_multiple_local_vms(self):
         vms = [vm_local(101), vm_local(202), vm_local(303)]
@@ -137,9 +143,12 @@ class TestBuildVmsDictMigratedVMs:
         result = _build_vms_dict([], [vm_resource(101, "node2")], ["999"], "node1")
         assert "node1:101" not in result
 
-    def test_empty_selection_includes_migrated_vm(self):
-        result = _build_vms_dict([], [vm_resource(101, "node2")], [], "node1")
+    def test_no_selection_includes_migrated_vm(self):
+        result = _build_vms_dict([], [vm_resource(101, "node2")], None, "node1")
         assert "node1:101" in result
+
+    def test_empty_selection_excludes_migrated_vm(self):
+        assert _build_vms_dict([], [vm_resource(101, "node2")], [], "node1") == {}
 
     def test_lxc_type_not_included_in_vms_dict(self):
         """Container-Ressourcen dürfen nicht in den VM-Dict wandern."""

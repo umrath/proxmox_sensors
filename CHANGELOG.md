@@ -4,6 +4,44 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [5.0.3] - 2026-09-11
+
+Befund aus dem Upstream-Vergleich (`Javisen/proxmox_sensors` 4.0.5 hat dasselbe
+Problem unabhängig erkannt). Betrifft nur die Auswahl-Listen, nicht den
+Transport.
+
+### Fixed
+
+- **Alle VMs/Container abwählen hatte keine Wirkung** (`logic/guest_keys.py`,
+  `sensor/__init__.py`, `button.py`, `coordinator.py`, `options_flow.py`) —
+  `if not selected_values` warf zwei verschiedene Zustände zusammen: „nichts
+  gespeichert" (Altbestand, soll alles zeigen) und „bewusst alles abgewählt"
+  (soll nichts zeigen). Wer in den Optionen alle Gäste abwählte und speicherte,
+  bekam sie weiterhin alle als Entitäten. Die Auswahl unterscheidet jetzt drei
+  Zustände: `None` = nichts gespeichert → alles anzeigen, `[]` = bewusst
+  abgewählt → nichts anzeigen, Liste → nur das Gewählte.
+
+- **Storage-Filter widersprach sich zwischen den Ebenen** (`coordinator.py`,
+  `sensor/__init__.py`) — Bei `selected_storage = []` behandelte der Coordinator
+  das als „alle Storages" (`not selected_storage or …`), die Entity-Erstellung
+  dagegen als „keine" (`st_name not in selected_storage`). Beide Ebenen folgen
+  jetzt derselben Regel.
+
+- **Optionen-Dialog hakte eine geleerte Auswahl wieder komplett an**
+  (`options_flow.py`) — `conf.get("selected_vms") or list(...)` ersetzte eine
+  leere Liste durch „alles", sodass sich das Abwählen auch optisch nicht
+  merken ließ.
+
+### Hinweis zur Migration
+
+- Wurde die Integration eingerichtet, als es auf dem Knoten **noch keine
+  VMs/Container gab**, ist `selected_vms`/`selected_cts` als leere Liste
+  gespeichert. Bisher erschienen später angelegte Gäste automatisch; mit der
+  korrigierten Semantik gelten sie als abgewählt. Einmal die Optionen der
+  Integration öffnen, die gewünschten Gäste anhaken und speichern. Einträge mit
+  bereits vorhandener Auswahl sind nicht betroffen, ebenso nicht der
+  Storage-Fall (dort wirkte `[]` schon vorher als „keine").
+
 ## [5.0.2] - 2026-09-11
 
 ### Fixed

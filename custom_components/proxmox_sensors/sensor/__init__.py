@@ -104,10 +104,16 @@ async def async_setup_entry(
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
 
-    selected_vms = entry.options.get("selected_vms", entry.data.get("selected_vms", []))
-    selected_cts = entry.options.get("selected_cts", entry.data.get("selected_cts", []))
+    # None = nothing stored (legacy entry) -> show all; [] = deselected on
+    # purpose -> show none. See logic.guest_keys.matches_selected_guest.
+    selected_vms = entry.options.get(
+        "selected_vms", entry.data.get("selected_vms", None)
+    )
+    selected_cts = entry.options.get(
+        "selected_cts", entry.data.get("selected_cts", None)
+    )
     selected_storage = entry.options.get(
-        "selected_storage", entry.data.get("selected_storage", [])
+        "selected_storage", entry.data.get("selected_storage", None)
     )
 
     enable_physical_disks = entry.options.get(
@@ -426,8 +432,8 @@ async def async_setup_entry(
                     if total == 0 and used == 0:
                         continue
 
-            # Respect user selection
-            if st_name not in selected_storage:
+            # Respect user selection (None = none stored -> show all)
+            if selected_storage is not None and st_name not in selected_storage:
                 continue
 
             created_storages.add(st_name)

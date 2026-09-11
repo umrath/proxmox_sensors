@@ -24,8 +24,12 @@ async def async_setup_entry(hass, entry, async_add_entities):
     else:
         client = data.get("client")
 
-    selected_vms = entry.options.get("selected_vms", entry.data.get("selected_vms", []))
-    selected_cts = entry.options.get("selected_cts", entry.data.get("selected_cts", []))
+    selected_vms = entry.options.get(
+        "selected_vms", entry.data.get("selected_vms", None)
+    )
+    selected_cts = entry.options.get(
+        "selected_cts", entry.data.get("selected_cts", None)
+    )
     enable_node_controls = entry.options.get(
         "enable_node_controls", entry.data.get("enable_node_controls", True)
     )

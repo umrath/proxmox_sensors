@@ -207,21 +207,18 @@ class ProxmoxOptionsFlow(config_entries.OptionsFlow):
                         continue
                 st_options[st_name] = st_name
 
-            selected_vms = [
-                v
-                for v in (conf.get("selected_vms") or list(vm_options.keys()))
-                if v in vm_options
-            ]
-            selected_cts = [
-                c
-                for c in (conf.get("selected_cts") or list(ct_options.keys()))
-                if c in ct_options
-            ]
-            selected_storage = [
-                s
-                for s in (conf.get("selected_storage") or list(st_options.keys()))
-                if s in st_options
-            ]
+            # `or` would turn a deliberately emptied selection back into
+            # "everything checked"; only a missing key means "all".
+            def _preselect(stored, options):
+                if stored is None:
+                    stored = list(options.keys())
+                return [item for item in stored if item in options]
+
+            selected_vms = _preselect(conf.get("selected_vms"), vm_options)
+            selected_cts = _preselect(conf.get("selected_cts"), ct_options)
+            selected_storage = _preselect(
+                conf.get("selected_storage"), st_options
+            )
 
             wol_fields = {
                 vol.Optional(
