@@ -168,3 +168,57 @@ class TestCoordinatorGuestSelection:
         )
         result = await coordinator.update_method()
         assert set(result["vms"]) == {"node1:101"}
+
+
+# ===========================================================================
+# Migrierte Gäste — matches_selected_guest wurde in 5.0.3 angefasst
+# ===========================================================================
+
+class TestMigratedGuestSelection:
+    """Ein migrierter Gast fehlt in der Node-Antwort und wird aus
+    cluster/resources unter seinem URSPRÜNGLICHEN node:vmid-Key ergänzt. Die
+    gespeicherte Auswahl muss ihn weiterhin treffen."""
+
+    def test_selection_by_original_key_still_matches_after_migration(self):
+        from custom_components.proxmox_sensors.coordinator import _build_vms_dict
+
+        # Auswahl auf node1 gespeichert, VM läuft jetzt auf node2.
+        result = _build_vms_dict(
+            [],
+            [{"type": "qemu", "vmid": 101, "node": "node2", "status": "running"}],
+            ["node1:101"],
+            "node1",
+        )
+        assert "node1:101" in result
+        assert result["node1:101"]["migrated"] is True
+        assert result["node1:101"]["current_node"] == "node2"
+
+    def test_legacy_raw_vmid_selection_matches_after_migration(self):
+        from custom_components.proxmox_sensors.coordinator import _build_vms_dict
+
+        result = _build_vms_dict(
+            [],
+            [{"type": "qemu", "vmid": 101, "node": "node2", "status": "running"}],
+            ["101"],
+            "node1",
+        )
+        assert "node1:101" in result
+
+    def test_unselected_migrated_guest_stays_excluded(self):
+        from custom_components.proxmox_sensors.coordinator import _build_vms_dict
+
+        result = _build_vms_dict(
+            [],
+            [{"type": "qemu", "vmid": 999, "node": "node2", "status": "running"}],
+            ["node1:101"],
+            "node1",
+        )
+        assert result == {}
+
+    def test_another_nodes_guest_is_not_claimed(self):
+        """Die Auswahl von node1 darf auf dem node2-Eintrag nicht greifen."""
+        from custom_components.proxmox_sensors.logic.guest_keys import (
+            matches_selected_guest,
+        )
+
+        assert not matches_selected_guest(["node1:101"], "node2", 101, "node2:101")

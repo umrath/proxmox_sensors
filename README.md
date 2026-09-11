@@ -4,7 +4,29 @@
 
 > **The most robust and detailed monitoring & control system for Proxmox VE & PBS in Home Assistant.**
 
-# 🚀 Proxmox Extended Sensors (v4)
+# 🚀 Proxmox Extended Sensors
+
+## ⚡ What's new in v5
+
+**v5 replaces the HTTP transport.** All Proxmox API calls now run on `aiohttp`
+with a hard per-request time limit, and the `proxmoxer` dependency is gone.
+
+Why it matters: until v5 every call was executed on Home Assistant's shared
+worker-thread pool. A cancelled call released the *waiting* coroutine but not
+the *thread*, so a node that answered slowly — a common symptom when `pvestatd`
+is blocked on unreachable storage — could tie up that pool until unrelated
+integrations stalled too. The async transport cannot leak a thread, so a slow
+node now only slows down its own coordinator.
+
+No configuration change is needed; API-token and username/password logins keep
+working as before.
+
+> Upgrading from v5.0.0 or v5.0.1? Please update — username/password logins were
+> broken in those two releases (the auth ticket was sent quoted and Proxmox
+> answered `401`). Fixed in v5.0.2.
+
+The sections below still describe the v4 feature set, which v5 carries over
+unchanged.
 
 ## 🚀 Introduction
 

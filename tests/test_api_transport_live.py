@@ -213,3 +213,77 @@ async def test_connection_refused_to_a_dead_port_returns_none():
         # Port 1 is reserved and never listening.
         client._api_base = MagicMock(return_value="http://127.0.0.1:1/api2/json")
         assert await client.get(MagicMock(), "nodes") is None
+
+
+@pytest.mark.asyncio
+async def test_ticket_stays_unquoted_even_if_the_jar_learns_the_cookie():
+    """Ein Reverse-Proxy vor PVE, der `Set-Cookie: PVEAuthCookie=…` schickt,
+    hätte den 401-Fehler zurückgebracht: aiohttp requotet einen expliziten
+    Cookie-Header, sobald der Jar einen Cookie gleichen Namens beisteuert. Und
+    zwar selbsterhaltend, weil ein 401 das Ticket verwirft und neu anmeldet.
+    """
+    seen = []
+
+    async def echo(request):
+        seen.append(request.headers.get("Cookie"))
+        response = web.json_response({"data": []})
+        # Proxy-Verhalten: Cookie wird gesetzt und landet im Jar der Session.
+        response.set_cookie("PVEAuthCookie", REAL_TICKET)
+        return response
+
+    app = web.Application()
+    app.router.add_get("/api2/json/nodes", echo)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", 0)
+    await site.start()
+    port = runner.addresses[0][1]
+
+    # unsafe=True, damit der Jar auch für eine IP speichert — so verhält sich
+    # HAs Standard-Jar gegenüber einem Hostnamen.
+    jar = aiohttp.CookieJar(unsafe=True)
+    async with aiohttp.ClientSession(cookie_jar=jar) as session:
+        client = ProxmoxClient(
+            host="127.0.0.1", user="root@pam", token_id=None,
+            token_secret=None, password="pw",
+        )
+        client._session = MagicMock(return_value=session)
+        client._api_base = MagicMock(
+            return_value=f"http://127.0.0.1:{port}/api2/json"
+        )
+        client._ticket = REAL_TICKET
+        client._csrf_token = "csrf"
+        client._ticket_expires = float("inf")
+
+        await client.get(MagicMock(), "nodes")   # Jar lernt das Cookie
+        await client.get(MagicMock(), "nodes")   # muss trotzdem roh rausgehen
+
+    await runner.cleanup()
+
+    assert len(jar) >= 1, "Vorbedingung: der Jar muss das Cookie gespeichert haben"
+    for raw in seen:
+        assert raw == f"PVEAuthCookie={REAL_TICKET}", f"mangled: {raw!r}"
+
+
+@pytest.mark.asyncio
+async def test_backup_notes_template_survives_form_encoding(server):
+    """`notes-template` enthält typischerweise Platzhalter und Leerzeichen.
+    Form-Encoding muss das unverfälscht übertragen — dieselbe Fehlerklasse wie
+    beim Cookie: eine Bibliothek, die Werte unterwegs umschreibt."""
+    notes = "HA backup {{guestname}} / {{node}} — 100% ok"
+    client = _client(server)
+
+    await client.post(
+        MagicMock(),
+        "nodes/n1/status",
+        {"vmid": "101", "storage": "local", "notes-template": notes},
+    )
+
+    from urllib.parse import parse_qs
+
+    write = [r for r in server["seen"]["requests"] if r["path"].endswith("status")][-1]
+    decoded = parse_qs(write["body"], keep_blank_values=True)
+    assert decoded["notes-template"] == [notes], (
+        f"notes-template was mangled: {decoded.get('notes-template')!r}"
+    )
+    assert decoded["vmid"] == ["101"]

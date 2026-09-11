@@ -42,12 +42,28 @@ class _CM:
         return False
 
 
+class FakeCookieJar:
+    """Mirrors the bit of aiohttp's jar API the client uses.
+
+    `_api_request` drops any stored PVEAuthCookie before each call so aiohttp
+    cannot re-quote the explicit Cookie header; the fake records those calls so
+    tests can assert on them.
+    """
+
+    def __init__(self):
+        self.cleared = 0
+
+    def clear(self, predicate=None):
+        self.cleared += 1
+
+
 class FakeSession:
     """Records calls and returns whatever `handler(method, url, kwargs)` yields."""
 
     def __init__(self, handler):
         self._handler = handler
         self.calls = []
+        self.cookie_jar = FakeCookieJar()
 
     def request(self, method, url, **kwargs):
         self.calls.append({"method": method, "url": url, **kwargs})

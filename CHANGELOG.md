@@ -4,6 +4,23 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [5.0.4] - 2026-09-11
+
+### Fixed
+
+- **Ein vorgeschaltetes `Set-Cookie` hätte den 401-Fehler aus 5.0.2
+  zurückgebracht** (`api.py`) — Der Ticket-Cookie wird seit 5.0.2 als
+  Rohheader gesetzt, weil aiohttps `cookies=`-Parameter jedes PVE-Ticket in
+  Anführungszeichen setzt. Gemessen: aiohttp requotet aber **auch einen
+  expliziten Header**, sobald der Cookie-Jar der Session einen Cookie
+  desselben Namens beisteuert. Home Assistants gemeinsame Session nutzt
+  aiohttps Standard-Jar, also genügt ein Reverse-Proxy vor PVE, der
+  `Set-Cookie: PVEAuthCookie=…` schickt. Der Fehler wäre selbsterhaltend
+  gewesen: 401 → Ticket verwerfen → Neulogin → erneut 401. Vor jedem Aufruf
+  wird nun gezielt der eigene Cookie-Name aus dem Jar entfernt; andere
+  Integrationen sind nicht betroffen, da `PVEAuthCookie` nur hier verwendet
+  wird. Betrifft nur Anmeldung per Benutzer/Passwort.
+
 ### Added
 
 - **Testabdeckung für die in 5.0.3 geänderten Auswahl-Stellen** — Eine
@@ -24,6 +41,15 @@ All notable changes to Proxmox Extended Sensors are documented here.
   bekam vor 5.0.3 **gar keine** Storage-Entitäten (Default `[]` traf auf
   `st_name not in selected_storage`). Das war mit 5.0.3 unbeabsichtigt
   mitbehoben und ist jetzt durch einen Test abgesichert.
+
+### Changed
+
+- **README nennt die aktuelle Hauptversion** — Die Startseite (in HACS
+  gerendert) bewarb weiterhin „v4" und beschrieb die alte Architektur. Neuer
+  Abschnitt zum v5-Transport samt Hinweis, dass Anmeldung per
+  Benutzer/Passwort in 5.0.0/5.0.1 defekt war. Die Feature-Abschnitte und die
+  übersetzten Anleitungen unter `docs/` sprechen weiterhin von v4; inhaltlich
+  gelten sie unverändert.
 
 ## [5.0.3] - 2026-09-11
 

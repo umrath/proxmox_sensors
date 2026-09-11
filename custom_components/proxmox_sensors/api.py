@@ -232,9 +232,16 @@ class ProxmoxClient:
                 # contains ``: @ + / =`` — true of every PVE ticket
                 # (``PVE:user@realm:HEX::sig==``). Proxmox rejects the quoted
                 # form with HTTP 401, so password auth failed outright.
-                # Caveat: aiohttp re-quotes an explicit header if the session's
-                # cookie jar also holds a PVEAuthCookie for this host. PVE does
-                # not Set-Cookie on the ticket endpoint, so the jar stays clean.
+                #
+                # aiohttp also re-quotes an explicit Cookie header as soon as the
+                # session's jar contributes a cookie of the same name, which would
+                # bring the 401 back — and self-sustainingly so, because a 401
+                # drops the ticket and triggers a fresh login. HA's shared session
+                # uses aiohttp's default jar, so a reverse proxy in front of PVE
+                # sending Set-Cookie is enough to trigger it. Dropping just our own
+                # cookie name keeps the jar from ever contributing one; no other
+                # integration uses PVEAuthCookie.
+                session.cookie_jar.clear(lambda c: c.key == "PVEAuthCookie")
                 headers["Cookie"] = f"PVEAuthCookie={ticket}"
                 if method != "GET" and csrf_token:
                     headers["CSRFPreventionToken"] = csrf_token
