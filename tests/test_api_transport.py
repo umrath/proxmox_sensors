@@ -460,3 +460,59 @@ class TestTlsVerification:
         with patch.object(api_mod, "async_get_clientsession") as factory:
             client._session(MagicMock())
         assert factory.call_args.kwargs["verify_ssl"] is True
+
+
+# ===========================================================================
+# Auth-/Validierungs-Fehlerpfade
+# ===========================================================================
+
+class TestAuthErrorPaths:
+    """Diese Zweige entscheiden, welche Meldung der Config-Flow anzeigt, waren
+    aber laut Coverage-Messung nie ausgeführt."""
+
+    @pytest.mark.asyncio
+    async def test_ticket_endpoint_server_error_maps_to_cannot_connect(self):
+        client = make_client(token_id=None, token_secret=None, password="pw")
+        attach(client, lambda m, u, k: FakeResponse(status=500))
+        with pytest.raises(CannotConnect):
+            await client.get(MagicMock(), "nodes", raise_errors=True)
+
+    @pytest.mark.asyncio
+    async def test_ticket_response_without_ticket_is_an_auth_error(self):
+        """HTTP 200, aber kein `ticket` im Payload — z. B. ein Reverse-Proxy,
+        der eine Login-Seite statt der API-Antwort zurückgibt."""
+        client = make_client(token_id=None, token_secret=None, password="pw")
+        attach(client, lambda m, u, k: FakeResponse(payload={"data": {}}))
+        with pytest.raises(AuthenticationError):
+            await client.get(MagicMock(), "nodes", raise_errors=True)
+
+    @pytest.mark.asyncio
+    async def test_ticket_403_maps_to_permission_error(self):
+        client = make_client(token_id=None, token_secret=None, password="pw")
+        attach(client, lambda m, u, k: FakeResponse(status=403))
+        with pytest.raises(ProxmoxPermissionError):
+            await client.get(MagicMock(), "nodes", raise_errors=True)
+
+    @pytest.mark.asyncio
+    async def test_pbs_without_token_raises_when_validating(self):
+        """Der Config-Flow validiert PBS über `get(..., raise_errors=True)`
+        (config_flow.py:301/322) — nur dieser Pfad wirft."""
+        client = make_client(server_type="PBS", token_id=None, token_secret=None)
+        attach(client, lambda m, u, k: FakeResponse(payload={"data": []}))
+        with pytest.raises(AuthenticationError):
+            await client.get(MagicMock(), "admin/datastore", raise_errors=True)
+
+    @pytest.mark.asyncio
+    async def test_pbs_without_token_returns_none_while_polling(self):
+        """Beim Polling gilt weiter: liefert None, wirft nicht."""
+        client = make_client(server_type="PBS", token_id=None, token_secret=None)
+        attach(client, lambda m, u, k: FakeResponse(payload={"data": []}))
+        assert await client.get(MagicMock(), "admin/datastore") is None
+
+    @pytest.mark.asyncio
+    async def test_validation_ignores_other_http_errors(self):
+        """Ein 500 auf einem optionalen Endpunkt darf die Validierung nicht
+        mit einer Auth-Meldung abbrechen, sondern nur None liefern."""
+        client = make_client()
+        attach(client, lambda m, u, k: FakeResponse(status=500))
+        assert await client.get(MagicMock(), "nodes", raise_errors=True) is None

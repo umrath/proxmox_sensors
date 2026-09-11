@@ -4,6 +4,27 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Testabdeckung für die in 5.0.3 geänderten Auswahl-Stellen** — Eine
+  Coverage-Messung zeigte, dass vier der fünf geänderten Stellen ungetestet
+  waren (`sensor/__init__.py` 9 %, `button.py` 0 %, `options_flow.py` 0 %, der
+  PBS-Datastore-Pfad im Coordinator gar nicht). Neu: Entity-Ebene für Storage,
+  Gäste und Buttons (`async_setup_entry` wird echt ausgeführt und die
+  entstandenen Entitäten gezählt), PBS-Datastore-Auswahl, Vorauswahl im
+  Optionen-Dialog sowie die Auth-Fehlerpfade des Transports (Ticket-Endpunkt
+  mit HTTP-Fehler, Antwort ohne Ticket, unvollständiges PBS-Token). Jeder neue
+  Test wurde gegen den alten Code gegengeprüft, damit er den jeweiligen Fehler
+  wirklich fängt. Abdeckung der betroffenen Module: `sensor/__init__.py`
+  9 → 48 %, `button.py` 38 → 59 %, `coordinator.py` 83 → 90 %,
+  `guest_keys.py` 100 %. Keine Produktionsänderung — die 5.0.3-Logik erwies
+  sich als korrekt.
+
+  Nebenbefund: Ein Altbestand-Eintrag ohne gespeicherte `selected_storage`
+  bekam vor 5.0.3 **gar keine** Storage-Entitäten (Default `[]` traf auf
+  `st_name not in selected_storage`). Das war mit 5.0.3 unbeabsichtigt
+  mitbehoben und ist jetzt durch einen Test abgesichert.
+
 ## [5.0.3] - 2026-09-11
 
 Befund aus dem Upstream-Vergleich (`Javisen/proxmox_sensors` 4.0.5 hat dasselbe
