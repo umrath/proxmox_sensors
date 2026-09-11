@@ -4,6 +4,27 @@ All notable changes to Proxmox Extended Sensors are documented here.
 
 ## [Unreleased]
 
+## [5.0.2] - 2026-09-11
+
+### Fixed
+
+- **Authentifizierung per Benutzer/Passwort schlug durchgehend mit HTTP 401
+  fehl** (`api.py`) — Das Ticket wurde über aiohttps Parameter `cookies=`
+  übergeben. Der leitet den Wert durch `SimpleCookie`, und das setzt ihn in
+  doppelte Anführungszeichen, sobald er `:` `@` `+` `/` oder `=` enthält — was
+  bei **jedem** PVE-Ticket der Fall ist (`PVE:benutzer@realm:HEX::signatur==`).
+  Proxmox lehnt die gequotete Form mit 401 ab; auf dem Draht stand
+  `PVEAuthCookie="PVE:root@pam:…"` statt `PVEAuthCookie=PVE:root@pam:…`. Das
+  Ticket wird jetzt direkt als `Cookie`-Header gesetzt. Setups mit API-Token
+  waren nie betroffen. Betrifft 5.0.0 und 5.0.1.
+
+  Warum die Tests das nicht fanden: sie prüften `request.cookies` des
+  aiohttp-Testservers — der parst den Header und entfernt die
+  Anführungszeichen wieder, sodass der Fehler auf beiden Seiten derselben
+  Bibliothek unsichtbar blieb. Die Prüfung erfolgt jetzt gegen den
+  **Rohheader** und mit einem realistisch geformten Ticket; gegenverifiziert,
+  dass der neue Test am alten Code scheitert.
+
 ## [5.0.1] - 2026-09-05
 
 Befunde aus dem Review des 5.0.0-Umbaus. Betrifft ausschließlich die

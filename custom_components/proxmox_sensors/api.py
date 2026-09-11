@@ -212,7 +212,6 @@ class ProxmoxClient:
         session = self._session(hass)
         url = f"{self._api_base()}/{path}"
         headers = {"Accept": "application/json"}
-        cookies = None
 
         try:
             auth_header = self._token_header()
@@ -227,7 +226,16 @@ class ProxmoxClient:
                 return None
             else:
                 ticket, csrf_token = await self._ensure_ticket(session)
-                cookies = {"PVEAuthCookie": ticket}
+                # The ticket MUST go out as a raw Cookie header, not via
+                # aiohttp's `cookies=` parameter: that routes the value through
+                # SimpleCookie, which wraps it in double quotes as soon as it
+                # contains ``: @ + / =`` — true of every PVE ticket
+                # (``PVE:user@realm:HEX::sig==``). Proxmox rejects the quoted
+                # form with HTTP 401, so password auth failed outright.
+                # Caveat: aiohttp re-quotes an explicit header if the session's
+                # cookie jar also holds a PVEAuthCookie for this host. PVE does
+                # not Set-Cookie on the ticket endpoint, so the jar stays clean.
+                headers["Cookie"] = f"PVEAuthCookie={ticket}"
                 if method != "GET" and csrf_token:
                     headers["CSRFPreventionToken"] = csrf_token
 
@@ -241,7 +249,6 @@ class ProxmoxClient:
                 method,
                 url,
                 headers=headers,
-                cookies=cookies,
                 timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
                 **payload_kwargs,
             ) as response:

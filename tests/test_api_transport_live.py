@@ -22,6 +22,12 @@ import custom_components.proxmox_sensors.api as api_mod
 from custom_components.proxmox_sensors.api import ProxmoxClient
 
 
+# Shaped like a real PVE ticket: contains ':', '@', '+', '/' and '=' — every one
+# of which makes SimpleCookie wrap the value in double quotes, which Proxmox
+# rejects with HTTP 401.
+REAL_TICKET = "PVE:root@pam:68C1F2A0::abcDEF123+/xyz=="
+
+
 @pytest.fixture
 async def server():
     """Minimal stand-in for the Proxmox API."""
@@ -33,7 +39,10 @@ async def server():
                 "path": request.path,
                 "method": request.method,
                 "headers": dict(request.headers),
-                "cookies": dict(request.cookies),
+                # The RAW Cookie header — `request.cookies` parses it through
+                # SimpleCookie and strips the quotes, which is exactly how the
+                # 5.0.0/5.0.1 quoting bug slipped past these tests.
+                "raw_cookie": request.headers.get("Cookie"),
                 "body": await request.text(),
             }
         )
@@ -45,7 +54,7 @@ async def server():
     async def ticket(request):
         await record(request)
         return web.json_response(
-            {"data": {"ticket": "PVE:tkt", "CSRFPreventionToken": "csrf-abc"}}
+            {"data": {"ticket": REAL_TICKET, "CSRFPreventionToken": "csrf-abc"}}
         )
 
     async def command(request):
@@ -126,9 +135,31 @@ async def test_password_ticket_flow_end_to_end(server):
     write = [r for r in server["seen"]["requests"] if r["path"].endswith("status")][0]
 
     assert "username=root%40pam" in login["body"] and "password=pw" in login["body"]
-    assert read["cookies"]["PVEAuthCookie"] == "PVE:tkt"
     assert write["headers"]["CSRFPreventionToken"] == "csrf-abc"
     assert write["body"] == "command=reboot"  # form-encoded, like proxmoxer sent
+
+    # The ticket must arrive byte-for-byte, UNQUOTED. Asserting on the raw
+    # header is the whole point: `request.cookies` would strip the quotes and
+    # hide the bug (as it did in 5.0.0/5.0.1).
+    assert read["raw_cookie"] == f"PVEAuthCookie={REAL_TICKET}"
+    assert '"' not in read["raw_cookie"]
+
+
+@pytest.mark.asyncio
+async def test_ticket_is_never_quoted_in_the_cookie_header(server):
+    """Regression for the 5.0.2 fix.
+
+    aiohttp's `cookies=` parameter routes the value through SimpleCookie, which
+    quotes anything containing ``: @ + / =`` — i.e. every PVE ticket. Proxmox
+    answers the quoted form with HTTP 401, so password auth was broken outright.
+    """
+    client = _client(server, token_id=None, token_secret=None, password="pw")
+    await client.get(MagicMock(), "nodes")
+
+    read = [r for r in server["seen"]["requests"] if r["path"].endswith("nodes")][0]
+    assert read["raw_cookie"] == f"PVEAuthCookie={REAL_TICKET}", (
+        f"ticket was mangled on the wire: {read['raw_cookie']!r}"
+    )
 
 
 @pytest.mark.asyncio

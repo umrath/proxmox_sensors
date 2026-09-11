@@ -132,7 +132,7 @@ class TestAuth:
         ticket_call, data_call = session.calls[0], session.calls[1]
         assert "access/ticket" in ticket_call["url"]
         assert ticket_call["data"] == {"username": "root@pam", "password": "pw"}
-        assert data_call["cookies"] == {"PVEAuthCookie": "PVE:tkt"}
+        assert data_call["headers"]["Cookie"] == "PVEAuthCookie=PVE:tkt"
 
     @pytest.mark.asyncio
     async def test_password_auth_sends_csrf_on_write_only(self):
@@ -318,7 +318,7 @@ class TestAuth:
         await client.post(MagicMock(), "nodes/n1/status", {"command": "reboot"})
 
         write = [c for c in session.calls if "status" in c["url"]][0]
-        n = write["cookies"]["PVEAuthCookie"].split("-")[1]
+        n = write["headers"]["Cookie"].split("tkt-")[1]
         assert write["headers"]["CSRFPreventionToken"] == f"csrf-{n}"
 
     @pytest.mark.asyncio
@@ -337,8 +337,9 @@ class TestAuth:
         await asyncio.gather(*(client.get(MagicMock(), "nodes") for _ in range(5)))
 
         for call in session.calls:
-            if call.get("cookies") is not None:
-                assert call["cookies"]["PVEAuthCookie"] is not None
+            cookie = call.get("headers", {}).get("Cookie")
+            if cookie is not None:
+                assert cookie != "PVEAuthCookie=None"
 
 
 # ===========================================================================
